@@ -1,8 +1,64 @@
 <!DOCTYPE html>
 <html>
-  <head><meta charset="utf-8"><title>Test</title></head>
-  <body style="font:20px/1.4 system-ui;padding:24px;">
-    <h1>GitHub Pages is working ✅</h1>
-    <p>If you can see this, hosting is fine. Next we’ll load Mapbox.</p>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <title>Buckeye Hunter Hub Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Mapbox libraries -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.0/mapbox-gl-draw.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.0/mapbox-gl-draw.css" rel="stylesheet" />
+  <style>
+    html, body { margin:0; padding:0; height:100%; }
+    #map { width:100%; height:100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script>
+    // Use your Mapbox access token here
+    mapboxgl.accessToken = 'pk.eyJ1Ijoic2hvZmZuZXJqIiwiYSI6ImNtZWUyMTNqMDBmaTcya3B6MmV2aHlrOGUifQ.PZnIeUf04MP4zueXTYTyOg';
+
+    // Initialize the map centered on Ohio
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/outdoors-v12',
+      center: [-82.9071, 40.4173],
+      zoom: 6
+    });
+
+    // Navigation controls (zoom in/out)
+    map.addControl(new mapboxgl.NavigationControl());
+
+    // Drawing tools (points, lines, polygons)
+    const Draw = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: {
+        point: true,       // drop markers
+        line_string: true, // trails
+        polygon: true,     // hunting land boundaries
+        trash: true
+      }
+    });
+    map.addControl(Draw);
+
+    // Example marker
+    new mapboxgl.Marker({ color: "green" })
+      .setLngLat([-82.9, 40.4])
+      .setPopup(new mapboxgl.Popup().setText("Sample Hunting Spot"))
+      .addTo(map);
+
+    // Log user drawings to the console
+    map.on('draw.create', update);
+    map.on('draw.update', update);
+    map.on('draw.delete', update);
+
+    function update(e) {
+      const data = Draw.getAll();
+      console.log("User drew:", data);
+    }
+  </script>
+</body>
 </html>
