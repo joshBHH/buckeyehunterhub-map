@@ -2,87 +2,21 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Buckeye Hunter Hub Map</title>
+  <title>Leaflet OSM Test</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Mapbox libs -->
-  <link href="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.css" rel="stylesheet" />
-  <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.0/mapbox-gl-draw.css" rel="stylesheet" />
-  <style>
-    html, body { margin:0; height:100%; }
-    #map { width:100%; height:100vh; }
-    #debug { position:fixed; top:8px; left:8px; background:#fff; padding:8px 10px; font:14px/1.4 system-ui; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.15); max-width:90vw; z-index:9999; }
-    #debug b { color:#222 }
-    #debug .ok { color: #0a7f2f }
-    #debug .warn { color: #a15c00 }
-    #debug .err { color: #b00020 }
-  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style> html,body,#map{height:100%;margin:0} </style>
 </head>
 <body>
   <div id="map"></div>
-  <div id="debug"><b>Status:</b> loading…</div>
-
-  <!-- Load scripts at end to avoid race conditions -->
-  <script src="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.js" defer></script>
-  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.0/mapbox-gl-draw.js" defer></script>
-
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const token = 'pk.eyJ1Ijoic2hvZmZuZXJqIiwiYSI6ImNtZWUyMTNqMDBmaTcya3B6MmV2aHlrOGUifQ.PZnIeUf04MP4zueXTYTyOg';
-    const dbg = (msg, cls='') => {
-      const el = document.getElementById('debug');
-      el.innerHTML += '<div class="'+cls+'">' + msg + '</div>';
-    };
-    const set = (msg, cls='') => { const el = document.getElementById('debug'); el.innerHTML = '<b>Status:</b> ' + msg; if (cls) el.className = cls; };
-
-    window.addEventListener('load', () => {
-      if (!window.mapboxgl) { set('Mapbox GL JS failed to load. Check network/ad blocker.', 'err'); return; }
-      set('Mapbox loaded. Initializing map…', 'ok');
-      mapboxgl.accessToken = token;
-
-      try {
-        const map = new mapboxgl.Map({
-          container: 'map',
-          style: 'mapbox://styles/mapbox/outdoors-v12',
-          center: [-82.9071, 40.4173],
-          zoom: 6
-        });
-
-        map.on('load', () => {
-          dbg('Map style loaded ✅','ok');
-        });
-
-        map.on('error', (e) => {
-          const msg = (e && e.error && e.error.message) ? e.error.message : 'Unknown Mapbox error';
-          dbg('Mapbox error: ' + msg, 'err');
-        });
-
-        map.addControl(new mapboxgl.NavigationControl());
-        const Draw = new MapboxDraw({
-          displayControlsDefault: false,
-          controls: { point:true, line_string:true, polygon:true, trash:true }
-        });
-        map.addControl(Draw);
-
-        new mapboxgl.Marker({ color: 'green' })
-          .setLngLat([-82.9, 40.4])
-          .setPopup(new mapboxgl.Popup().setText('Sample Hunting Spot'))
-          .addTo(map);
-
-        function update() {
-          const data = Draw.getAll();
-          dbg('User drew: ' + data.features.length + ' feature(s).', 'warn');
-        }
-        map.on('draw.create', update);
-        map.on('draw.update', update);
-        map.on('draw.delete', update);
-
-        set('Map initialized. If the map is still blank, check messages below.');
-      } catch (err) {
-        set('Init error: ' + (err && err.message ? err.message : err), 'err');
-      }
-    });
+    const map = L.map('map').setView([40.4173, -82.9071], 6); // Ohio
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    L.marker([40.4,-82.9]).addTo(map).bindPopup('Sample Hunting Spot');
   </script>
-  <noscript>
-    <div style="padding:12px;font:16px system-ui">Enable JavaScript to view the map.</div>
-  </noscript>
 </body>
 </html>
