@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Buckeye Hunter Hub – Leaflet + Draw + Save</title>
+  <title>Buckeye Hunter Hub – Hunt Map (Leaflet + Draw + Save + Public Lands + Legal Light)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Leaflet (unpkg) -->
@@ -13,15 +13,18 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 
+  <!-- SunCalc for sunrise/sunset (unpkg) -->
+  <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
+
   <style>
     html, body { height: 100%; margin: 0; }
     #map { width: 100%; height: 100vh; }
 
     .toolbar {
       position: fixed; z-index: 1000; top: 10px; left: 10px;
-      background: #ffffff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      background: #fff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
       padding: 8px 10px; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      display: flex; gap: 8px; align-items: center;
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     }
     .toolbar button, .toolbar label {
       cursor: pointer; border: 1px solid #ddd; border-radius: 8px; padding: 6px 10px; background: #f9f9f9;
@@ -29,37 +32,68 @@
     .toolbar button:hover, .toolbar label:hover { background: #f1f1f1; }
     .toolbar input[type="file"] { display: none; }
 
-    .notice {
-      position: fixed; bottom: 8px; left: 8px; font: 12px system-ui;
-      background: rgba(255,255,255,.85); padding: 4px 6px; border-radius: 6px;
+    .panel {
+      position: fixed; z-index: 1000; top: 10px; right: 10px; max-width: 280px;
+      background: #fff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      padding: 10px 12px; font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
+    .panel h3 { margin: 0 0 6px; font-size: 15px; }
+    .panel .row { display: flex; justify-content: space-between; gap: 8px; }
+    .panel .muted { color: #666; font-size: 12px; }
+    .legend {
+      position: fixed; z-index: 1000; bottom: 10px; left: 10px;
+      background: #fff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      padding: 6px 10px; font: 13px/1.4 system-ui;
+    }
+    .swatch { display:inline-block; width:14px; height:14px; margin-right:6px; border-radius:3px; vertical-align: -3px; }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Simple UI -->
+  <!-- Left toolbar: draw/save/import/export/fullscreen + geolocate -->
   <div class="toolbar">
     <button id="btnExport" title="Download your drawings as GeoJSON">Export GeoJSON</button>
     <button id="btnClear" title="Clear all drawings from the map">Clear</button>
     <label for="fileImport" title="Import a GeoJSON file you exported earlier">Import GeoJSON</label>
     <input type="file" id="fileImport" accept=".json,.geojson,application/geo+json,application/json"/>
     <button id="btnFull" title="Toggle fullscreen">Fullscreen</button>
+    <button id="btnLocate" title="Center on my GPS location">Use My Location</button>
   </div>
 
-  <div class="notice">
-    Tiles © <a href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors
+  <!-- Right panel: legal light -->
+  <div class="panel" id="panel">
+    <h3>Legal Light (Map Center)</h3>
+    <div class="muted" id="where"></div>
+    <div class="row"><div>Sunrise</div><div id="sunrise">—</div></div>
+    <div class="row"><div>Sunset</div><div id="sunset">—</div></div>
+    <div class="row"><div>Civil dawn</div><div id="civilDawn">—</div></div>
+    <div class="row"><div>Civil dusk</div><div id="civilDusk">—</div></div>
+    <div class="row"><div>Day length</div><div id="dayLength">—</div></div>
+    <div class="muted" id="dateLine"></div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div><span class="swatch" style="background:#2563eb;"></span> Drawn lines</div>
+    <div><span class="swatch" style="background:#16a34a;"></span> Drawn polygons</div>
+    <div><span class="swatch" style="background:#d97706;"></span> Drawn rectangles</div>
+    <div><span class="swatch" style="background:#8b5cf6;"></span> Public hunting lands</div>
   </div>
 
   <script>
-    // --- Base map (Ohio) ---
-    const map = L.map('map').setView([40.4173, -82.9071], 6);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // --------------------------
+    // MAP + BASE LAYER
+    // --------------------------
+    const map = L.map('map').setView([40.4173, -82.9071], 6); // Ohio
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // --- Drawing layer & controls ---
+    // --------------------------
+    // DRAWING + PERSISTENCE
+    // --------------------------
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
 
@@ -67,60 +101,40 @@
       position: 'topleft',
       draw: {
         marker: true,
-        polyline: { shapeOptions: { color: '#2b6cb0', weight: 4 } },
-        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#2f855a' } },
-        rectangle: { shapeOptions: { color: '#d69e2e' } },
+        polyline: { shapeOptions: { color: '#2563eb', weight: 4 } },
+        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#16a34a' } },
+        rectangle: { shapeOptions: { color: '#d97706' } },
         circle: false
       },
       edit: { featureGroup: drawnItems, remove: true }
     });
     map.addControl(drawControl);
 
-    // --- Persistence (auto-save to localStorage) ---
     const STORAGE_KEY = 'bhh_leaflet_drawings_v1';
-
-    function saveAll() {
-      const geo = drawnItems.toGeoJSON();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(geo));
-    }
-
+    function saveAll() { localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
     function restoreAll() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
+        const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return;
         const geo = JSON.parse(raw);
         L.geoJSON(geo, { onEachFeature: (_, layer) => drawnItems.addLayer(layer) });
-      } catch (e) {
-        console.warn('Restore failed:', e);
-      }
+      } catch (e) { console.warn('Restore failed:', e); }
     }
-
     restoreAll();
-
-    // Save after create/edit/delete
     map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
     map.on(L.Draw.Event.EDITED, saveAll);
     map.on(L.Draw.Event.DELETED, saveAll);
 
-    // --- Export / Import / Clear / Fullscreen ---
+    // Export / Import / Clear / Fullscreen / Geolocate
     document.getElementById('btnExport').addEventListener('click', () => {
       const data = drawnItems.toGeoJSON();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/geo+json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'buckeyehunterhub-drawings.geojson';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = 'buckeyehunterhub-drawings.geojson';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     });
-
-    document.getElementById('btnClear').addEventListener('click', () => {
-      drawnItems.clearLayers();
-      saveAll();
-    });
-
+    document.getElementById('btnClear').addEventListener('click', () => { drawnItems.clearLayers(); saveAll(); });
     document.getElementById('fileImport').addEventListener('change', (ev) => {
-      const file = ev.target.files[0];
-      if (!file) return;
+      const file = ev.target.files[0]; if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
         try {
@@ -132,22 +146,100 @@
       reader.readAsText(file);
       ev.target.value = '';
     });
-
     const mapEl = document.getElementById('map');
     document.getElementById('btnFull').addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        mapEl.requestFullscreen?.() || mapEl.webkitRequestFullscreen?.();
-      } else {
-        document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+      if (!document.fullscreenElement) { mapEl.requestFullscreen?.() || mapEl.webkitRequestFullscreen?.(); }
+      else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); }
+    });
+    document.getElementById('btnLocate').addEventListener('click', () => {
+      if (!navigator.geolocation) return alert('Geolocation not supported');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { map.setView([pos.coords.latitude, pos.coords.longitude], 12); },
+        () => alert('Could not get GPS location')
+      );
+    });
+
+    // --------------------------
+    // PUBLIC HUNTING LANDS LAYER
+    // --------------------------
+    // 1) Upload your GeoJSON to THIS repo (e.g., ohio_public_hunting.geojson).
+    // 2) Click the file in GitHub → "Raw" → copy the URL that starts with
+    //    https://raw.githubusercontent.com/joshbhh/buckeyehunterhub-map/main/ohio_public_hunting.geojson
+    // 3) Paste it below as DATA_URL and commit.
+    const DATA_URL = 'SAMPLE'; // <--- replace with your raw GitHub URL when ready
+
+    // simple fallback SAMPLE polygon so the map works right now:
+    const SAMPLE_GEOJSON = {
+      "type":"FeatureCollection",
+      "features":[
+        {"type":"Feature","properties":{"name":"Sample Public Hunting Area"},
+         "geometry":{"type":"Polygon","coordinates":[[
+           [-83.2, 40.7],[-83.0, 40.7],[-83.0, 40.55],[-83.2,40.55],[-83.2,40.7]
+         ]]}}
+      ]
+    };
+
+    const publicLandsStyle = {
+      color: '#8b5cf6', weight: 2, fillOpacity: 0.18
+    };
+    const publicLandsLayer = L.geoJSON(null, {
+      style: publicLandsStyle,
+      onEachFeature: (f, layer) => {
+        const n = (f.properties && (f.properties.name || f.properties.AREA_NAME || f.properties.Title)) || 'Public Hunting Land';
+        layer.bindPopup(n);
       }
     });
 
-    // Optional: a sample marker you can delete
-    // L.marker([40.4, -82.9]).addTo(map).bindPopup('Sample Hunting Spot');
-  </script>
-</body>
-</html>
+    function loadPublicLands() {
+      if (DATA_URL === 'SAMPLE') {
+        publicLandsLayer.addData(SAMPLE_GEOJSON);
+        return;
+      }
+      fetch(DATA_URL)
+        .then(r => r.json())
+        .then(geo => publicLandsLayer.addData(geo))
+        .catch(err => {
+          console.warn('Failed to load public lands GeoJSON; using sample fallback.', err);
+          publicLandsLayer.addData(SAMPLE_GEOJSON);
+        });
+    }
+    loadPublicLands();
 
+    // Add layer control to toggle
+    const baseMaps = { "OpenStreetMap": osm };
+    const overlayMaps = { "Ohio Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
+    L.control.layers(baseMaps, overlayMaps, { collapsed:true }).addTo(map);
+
+    // --------------------------
+    // LEGAL LIGHT (SunCalc)
+    // --------------------------
+    function fmtTime(d) {
+      if (!d || isNaN(d.getTime())) return '—';
+      return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }
+    function dayLen(sr, ss) {
+      if (!sr || !ss) return '—';
+      const ms = ss - sr;
+      const h = Math.floor(ms/3600000), m = Math.round((ms%3600000)/60000);
+      return `${h}h ${m}m`;
+    }
+    function updateSun() {
+      const c = map.getCenter();
+      const lat = c.lat, lng = c.lng;
+      const now = new Date();
+      // SunCalc times for today at map center
+      const t = SunCalc.getTimes(now, lat, lng);
+      document.getElementById('where').textContent = `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
+      document.getElementById('sunrise').textContent = fmtTime(t.sunrise);
+      document.getElementById('sunset').textContent  = fmtTime(t.sunset);
+      document.getElementById('civilDawn').textContent = fmtTime(t.dawn);
+      document.getElementById('civilDusk').textContent = fmtTime(t.dusk);
+      document.getElementById('dayLength').textContent = dayLen(t.sunrise, t.sunset);
+      document.getElementById('dateLine').textContent = now.toLocaleDateString();
+    }
+    map.on('load', updateSun);
+    map.whenReady(updateSun);
+    map.on('moveend', updateSun);
   </script>
 </body>
 </html>
