@@ -85,7 +85,7 @@
 
     // Public Hunting Lands
     const publicLandsLayer = L.geoJSON(null, { style:{color:'#8b5cf6', weight:2, fillOpacity:0.2} });
-    const DATA_URL = "https://raw.githubusercontent.com/joshbhh/buckeyehunterhub-map/main/ohio_public_hunting.geojson";
+    const DATA_URL = "blob:https://github.com/63a0ef9f-e9f8-462b-80a1-ac858f86efb1";
     fetch(DATA_URL).then(r=>r.json()).then(j=>publicLandsLayer.addData(j));
     const overlays = { "Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
     L.control.layers(null, overlays).addTo(map);
