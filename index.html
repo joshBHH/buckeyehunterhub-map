@@ -17,32 +17,36 @@
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
 
   <style>
-    html, body { height:100%; margin:0; }
-    #map { width:100%; height:100vh; }
-    .toolbar { position:fixed; top:10px; left:10px; z-index:1000; background:#fff; border-radius:8px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
-    .toolbar button, .toolbar label { margin:2px; padding:4px 8px; }
-    .panel { position:fixed; top:10px; right:10px; z-index:1000; background:#fff; border-radius:8px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
+html, body { height:100%; margin:0; }
+#map { width:100%; height:100vh; }
 
-  <div class="toolbar">
-    <button id="btnExport">Export</button>
-    <button id="btnClear">Clear</button>
-    <label for="fileImport">Import</label>
-    <input type="file" id="fileImport" accept=".geojson,.json"/>
-    <button id="btnFull">Fullscreen</button>
-  </div>
+/* Toolbar (draw/export/etc.) */
+.toolbar {
+  position:fixed; 
+  top:70px;   /* moved down so zoom buttons show above */
+  left:10px; 
+  z-index:1000;
+  background:#fff; 
+  border-radius:8px; 
+  padding:6px; 
+  box-shadow:0 2px 8px rgba(0,0,0,.2);
+}
+.toolbar button, .toolbar label { margin:2px; padding:4px 8px; }
 
-  <div class="panel">
-    <h3>Legal Light</h3>
-    <div id="sunrise"></div>
-    <div id="sunset"></div>
-    <div id="civilDawn"></div>
-    <div id="civilDusk"></div>
-    <div id="dayLength"></div>
-  </div>
+/* Legal light panel */
+.panel {
+  position:fixed; 
+  top:10px; 
+  right:10px; 
+  z-index:900; 
+  background:#fff; 
+  border-radius:8px; 
+  padding:6px; 
+  box-shadow:0 2px 8px rgba(0,0,0,.2);
+  max-width:260px;
+  font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+}
+.panel h3 { margin:0 0 6px; font-size:15px; }
 
   <script>
     const map = L.map('map').setView([40.4173, -82.9071], 6);
