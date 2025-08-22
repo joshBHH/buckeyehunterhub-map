@@ -86,8 +86,12 @@
     const publicLandsLayer = L.geoJSON(null, { style:{color:'#8b5cf6', weight:2, fillOpacity:0.2} });
     const DATA_URL = "https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson";
     fetch(DATA_URL).then(r=>r.json()).then(j=>publicLandsLayer.addData(j));
-    const overlays = { "Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
-    L.control.layers(null, overlays).addTo(map);
+const overlays = { 
+  "Public Hunting Lands": publicLandsLayer, 
+  "My Drawings": drawnItems 
+};
+L.control.layers(null, overlays).addTo(map);
+
 
     // SunCalc
     function updateSun(){
