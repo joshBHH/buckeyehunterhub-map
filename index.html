@@ -17,96 +17,140 @@
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
 
   <style>
-html, body { height:100%; margin:0; }
-#map { width:100%; height:100vh; }
+    html, body { height:100%; margin:0; }
+    #map { width:100%; height:100vh; }
 
-/* Toolbar (draw/export/etc.) */
-.toolbar {
-  position:fixed; 
-  top:70px;   /* moved down so zoom buttons show above */
-  left:10px; 
-  z-index:1000;
-  background:#fff; 
-  border-radius:8px; 
-  padding:6px; 
-  box-shadow:0 2px 8px rgba(0,0,0,.2);
-}
-.toolbar button, .toolbar label { margin:2px; padding:4px 8px; }
+    /* Toolbar (Export/Clear/Import/Fullscreen) */
+    .toolbar {
+      position: fixed;
+      top: 70px;      /* moved down so zoom controls at top-left are visible */
+      left: 10px;
+      z-index: 1000;
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    .toolbar button, .toolbar label {
+      margin: 2px; padding: 4px 8px; cursor: pointer;
+      border: 1px solid #ddd; border-radius: 6px; background: #f9f9f9;
+    }
+    .toolbar input[type="file"] { display: none; }
 
-/* Legal light panel */
-.panel {
-  position:fixed; 
-  top:10px; 
-  right:10px; 
-  z-index:900; 
-  background:#fff; 
-  border-radius:8px; 
-  padding:6px; 
-  box-shadow:0 2px 8px rgba(0,0,0,.2);
-  max-width:260px;
-  font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial;
-}
-.panel h3 { margin:0 0 6px; font-size:15px; }
+    /* Legal light panel stays top-right */
+    .panel {
+      position: fixed;
+      top: 10px; right: 10px; z-index: 900;
+      background: #fff; border-radius: 8px; padding: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      max-width: 260px;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    .panel h3 { margin: 0 0 6px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button id="btnExport" title="Download drawings as GeoJSON">Export</button>
+    <button id="btnClear" title="Clear all drawings">Clear</button>
+    <label for="fileImport" title="Import a GeoJSON file">Import</label>
+    <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json"/>
+    <button id="btnFull" title="Toggle fullscreen">Fullscreen</button>
+  </div>
+
+  <!-- Legal Light -->
+  <div class="panel">
+    <h3>Legal Light</h3>
+    <div id="sunrise"></div>
+    <div id="sunset"></div>
+    <div id="civilDawn"></div>
+    <div id="civilDusk"></div>
+    <div id="dayLength"></div>
+  </div>
 
   <script>
+    // Base map (Ohio)
     const map = L.map('map').setView([40.4173, -82.9071], 6);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom:19,
-      attribution:'&copy; OpenStreetMap'
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
     // Drawing + persistence
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
-    map.addControl(new L.Control.Draw({ edit:{ featureGroup: drawnItems }, draw:{ circle:false } }));
+    map.addControl(new L.Control.Draw({
+      edit: { featureGroup: drawnItems },
+      draw: { circle: false }
+    }));
 
     const STORAGE_KEY = "bhh_drawings";
     function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
-    function restoreAll(){ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ L.geoJSON(JSON.parse(raw), {onEachFeature:(_,l)=>drawnItems.addLayer(l)}); } }
+    function restoreAll(){
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) L.geoJSON(JSON.parse(raw), { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
+    }
     restoreAll();
 
     map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
     map.on(L.Draw.Event.EDITED, saveAll);
     map.on(L.Draw.Event.DELETED, saveAll);
 
-    // Export / Clear / Import / Fullscreen
+    // Toolbar actions
     document.getElementById('btnExport').onclick = () => {
-      const blob = new Blob([JSON.stringify(drawnItems.toGeoJSON(), null, 2)], {type:'application/json'});
+      const blob = new Blob([JSON.stringify(drawnItems.toGeoJSON(), null, 2)], {type:'application/geo+json'});
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download='drawings.geojson'; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = 'drawings.geojson';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     };
     document.getElementById('btnClear').onclick = () => { drawnItems.clearLayers(); saveAll(); };
     document.getElementById('fileImport').onchange = ev => {
-      const f = ev.target.files[0]; if(!f) return;
-      const reader = new FileReader(); reader.onload = () => {
-        L.geoJSON(JSON.parse(reader.result), {onEachFeature:(_,l)=>drawnItems.addLayer(l)}); saveAll();
-      }; reader.readAsText(f);
+      const f = ev.target.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const geo = JSON.parse(reader.result);
+          L.geoJSON(geo, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
+          saveAll();
+        } catch { alert('Invalid GeoJSON'); }
+      };
+      reader.readAsText(f);
+      ev.target.value = '';
     };
     document.getElementById('btnFull').onclick = () => {
-      const el = map.getContainer(); if(!document.fullscreenElement){ el.requestFullscreen?.(); } else { document.exitFullscreen(); }
+      const el = map.getContainer();
+      if (!document.fullscreenElement) { el.requestFullscreen?.(); }
+      else { document.exitFullscreen?.(); }
     };
 
-    // Public Hunting Lands (ODNR direct service URL)
-    const publicLandsLayer = L.geoJSON(null, { style:{color:'#8b5cf6', weight:2, fillOpacity:0.2} });
+    // Public Hunting Lands (live from ODNR service)
+    const publicLandsLayer = L.geoJSON(null, { style:{ color:'#8b5cf6', weight:2, fillOpacity:0.2 } });
     const DATA_URL = "https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson";
-    fetch(DATA_URL).then(r=>r.json()).then(j=>publicLandsLayer.addData(j));
-const overlays = { 
-  "Public Hunting Lands": publicLandsLayer, 
-  "My Drawings": drawnItems 
-};
-L.control.layers(null, overlays, { position: 'bottomleft' }).addTo(map);
+    fetch(DATA_URL)
+      .then(r => r.json())
+      .then(j => publicLandsLayer.addData(j))
+      .catch(err => console.warn('ODNR layer load failed:', err));
 
+    // Layers control (bottom-left so it never overlaps the toolbar)
+    const overlays = {
+      "Public Hunting Lands": publicLandsLayer,
+      "My Drawings": drawnItems
+    };
+    L.control.layers(null, overlays, { position: 'bottomleft' }).addTo(map);
 
-
-    // SunCalc
+    // Legal Light (SunCalc)
     function updateSun(){
-      const c = map.getCenter(); const now=new Date(); const t=SunCalc.getTimes(now,c.lat,c.lng);
-      const fmt = (d)=> d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
-      document.getElementById('sunrise').innerText = "Sunrise: " + fmt(t.sunrise);
-      document.getElementById('sunset').innerText  = "Sunset: " + fmt(t.sunset);
-      document.getElementById('civilDawn').innerText = "Civil dawn: " + fmt(t.dawn);
-      document.getElementById('civilDusk').innerText = "Civil dusk: " + fmt(t.dusk);
-      const len=(t.sunset - t.sunrise)/60000; document.getElementById('dayLength').innerText="Day length: "+Math.floor(len/60)+"h "+(len%60|0)+"m";
+      const c = map.getCenter(), now = new Date(), t = SunCalc.getTimes(now, c.lat, c.lng);
+      const fmt = d => d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
+      document.getElementById('sunrise').textContent   = "Sunrise: " + fmt(t.sunrise);
+      document.getElementById('sunset').textContent    = "Sunset: "  + fmt(t.sunset);
+      document.getElementById('civilDawn').textContent = "Civil dawn: " + fmt(t.dawn);
+      document.getElementById('civilDusk').textContent = "Civil dusk: " + fmt(t.dusk);
+      const mins = (t.sunset - t.sunrise) / 60000; 
+      document.getElementById('dayLength').textContent = "Day length: " + Math.floor(mins/60) + "h " + (mins%60|0) + "m";
     }
     updateSun(); map.on('moveend', updateSun);
   </script>
