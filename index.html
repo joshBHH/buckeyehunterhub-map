@@ -51,41 +51,40 @@
       attribution:'&copy; OpenStreetMap'
     }).addTo(map);
 
-    // Drawing
+    // Drawing + persistence
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
-    map.addControl(new L.Control.Draw({ edit:{ featureGroup: drawnItems } }));
-
-    map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
-    map.on(L.Draw.Event.EDITED, saveAll);
-    map.on(L.Draw.Event.DELETED, saveAll);
+    map.addControl(new L.Control.Draw({ edit:{ featureGroup: drawnItems }, draw:{ circle:false } }));
 
     const STORAGE_KEY = "bhh_drawings";
     function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
     function restoreAll(){ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ L.geoJSON(JSON.parse(raw), {onEachFeature:(_,l)=>drawnItems.addLayer(l)}); } }
     restoreAll();
 
-    // Export
+    map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
+    map.on(L.Draw.Event.EDITED, saveAll);
+    map.on(L.Draw.Event.DELETED, saveAll);
+
+    // Export / Clear / Import / Fullscreen
     document.getElementById('btnExport').onclick = () => {
       const blob = new Blob([JSON.stringify(drawnItems.toGeoJSON(), null, 2)], {type:'application/json'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href=url; a.download='drawings.geojson'; a.click(); URL.revokeObjectURL(url);
     };
-    // Clear
     document.getElementById('btnClear').onclick = () => { drawnItems.clearLayers(); saveAll(); };
-    // Import
     document.getElementById('fileImport').onchange = ev => {
       const f = ev.target.files[0]; if(!f) return;
       const reader = new FileReader(); reader.onload = () => {
         L.geoJSON(JSON.parse(reader.result), {onEachFeature:(_,l)=>drawnItems.addLayer(l)}); saveAll();
       }; reader.readAsText(f);
     };
-    // Fullscreen
-    document.getElementById('btnFull').onclick = () => { if(!document.fullscreenElement){ map.getContainer().requestFullscreen(); } else { document.exitFullscreen(); } };
+    document.getElementById('btnFull').onclick = () => {
+      const el = map.getContainer(); if(!document.fullscreenElement){ el.requestFullscreen?.(); } else { document.exitFullscreen(); }
+    };
 
-    // Public Hunting Lands
+    // Public Hunting Lands (ODNR direct service URL)
     const publicLandsLayer = L.geoJSON(null, { style:{color:'#8b5cf6', weight:2, fillOpacity:0.2} });
-    const DATA_URL = "blob:https://github.com/63a0ef9f-e9f8-462b-80a1-ac858f86efb1";
+    const DATA_URL = "https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson";
     fetch(DATA_URL).then(r=>r.json()).then(j=>publicLandsLayer.addData(j));
     const overlays = { "Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
     L.control.layers(null, overlays).addTo(map);
@@ -93,10 +92,11 @@
     // SunCalc
     function updateSun(){
       const c = map.getCenter(); const now=new Date(); const t=SunCalc.getTimes(now,c.lat,c.lng);
-      document.getElementById('sunrise').innerText = "Sunrise: " + t.sunrise.toLocaleTimeString();
-      document.getElementById('sunset').innerText  = "Sunset: " + t.sunset.toLocaleTimeString();
-      document.getElementById('civilDawn').innerText = "Civil dawn: " + t.dawn.toLocaleTimeString();
-      document.getElementById('civilDusk').innerText = "Civil dusk: " + t.dusk.toLocaleTimeString();
+      const fmt = (d)=> d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
+      document.getElementById('sunrise').innerText = "Sunrise: " + fmt(t.sunrise);
+      document.getElementById('sunset').innerText  = "Sunset: " + fmt(t.sunset);
+      document.getElementById('civilDawn').innerText = "Civil dawn: " + fmt(t.dawn);
+      document.getElementById('civilDusk').innerText = "Civil dusk: " + fmt(t.dusk);
       const len=(t.sunset - t.sunrise)/60000; document.getElementById('dayLength').innerText="Day length: "+Math.floor(len/60)+"h "+(len%60|0)+"m";
     }
     updateSun(); map.on('moveend', updateSun);
