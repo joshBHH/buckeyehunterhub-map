@@ -5,278 +5,101 @@
   <title>Buckeye Hunter Hub – Hunt Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Leaflet core (unpkg CDN) -->
+  <!-- Leaflet core -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Draw tools -->
+  <!-- Leaflet.draw -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 
-  <!-- SunCalc for legal light -->
+  <!-- SunCalc -->
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-
-  <!-- LZ-String for shareable links -->
-  <script src="https://unpkg.com/lz-string@1.4.4/libs/lz-string.min.js"></script>
 
   <style>
     html, body { height:100%; margin:0; }
     #map { width:100%; height:100vh; }
-
-    .toolbar {
-      position: fixed; z-index: 1000; top: 10px; left: 10px;
-      background:#fff; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.15);
-      padding:8px 10px; font:14px/1.4 system-ui; display:flex; flex-wrap:wrap; gap:8px;
-    }
-    .toolbar button, .toolbar label {
-      cursor:pointer; border:1px solid #ddd; border-radius:8px; padding:6px 10px; background:#f9f9f9;
-    }
-    .toolbar input[type="file"]{ display:none; }
-
-    .panel {
-      position: fixed; z-index: 1000; top: 10px; right: 10px; max-width: 300px;
-      background:#fff; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.15);
-      padding:10px 12px; font:14px/1.5 system-ui;
-    }
-    .panel h3 { margin:0 0 6px; font-size:15px; }
-    .row { display:flex; justify-content:space-between; gap:8px; }
-    .muted { color:#666; font-size:12px; }
-
-    .legend {
-      position: fixed; z-index: 1000; bottom: 10px; left: 10px;
-      background:#fff; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.15);
-      padding:6px 10px; font:13px/1.4 system-ui;
-    }
-    .swatch { display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:6px; vertical-align:-3px; }
-
-    /* Print */
-    @media print {
-      .toolbar, .panel, .legend, .leaflet-control-container { display:none !important; }
-      #map { height:100vh; }
-    }
+    .toolbar { position:fixed; top:10px; left:10px; z-index:1000; background:#fff; border-radius:8px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+    .toolbar button, .toolbar label { margin:2px; padding:4px 8px; }
+    .panel { position:fixed; top:10px; right:10px; z-index:1000; background:#fff; border-radius:8px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,.2); }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Left: tools -->
   <div class="toolbar">
-    <button id="btnExport">Export GeoJSON</button>
+    <button id="btnExport">Export</button>
     <button id="btnClear">Clear</button>
-    <label for="fileImport">Import GeoJSON</label>
-    <input id="fileImport" type="file" accept=".json,.geojson,application/geo+json,application/json"/>
+    <label for="fileImport">Import</label>
+    <input type="file" id="fileImport" accept=".geojson,.json"/>
     <button id="btnFull">Fullscreen</button>
-    <button id="btnLocate">Use My Location</button>
-    <button id="btnShare">Share Link</button>
-    <button id="btnPrint">Print</button>
   </div>
 
-  <!-- Right: legal light -->
-  <div class="panel" id="panel">
-    <h3>Legal Light (Map Center)</h3>
-    <div class="muted" id="where"></div>
-    <div class="row"><div>Sunrise</div><div id="sunrise">—</div></div>
-    <div class="row"><div>Sunset</div><div id="sunset">—</div></div>
-    <div class="row"><div>Civil dawn</div><div id="civilDawn">—</div></div>
-    <div class="row"><div>Civil dusk</div><div id="civilDusk">—</div></div>
-    <div class="row"><div>Day length</div><div id="dayLength">—</div></div>
-    <div class="muted" id="dateLine"></div>
-  </div>
-
-  <!-- Legend -->
-  <div class="legend">
-    <div><span class="swatch" style="background:#2563eb;"></span> Drawn lines</div>
-    <div><span class="swatch" style="background:#16a34a;"></span> Drawn polygons</div>
-    <div><span class="swatch" style="background:#d97706;"></span> Drawn rectangles</div>
-    <div><span class="swatch" style="background:#8b5cf6;"></span> Public hunting lands</div>
+  <div class="panel">
+    <h3>Legal Light</h3>
+    <div id="sunrise"></div>
+    <div id="sunset"></div>
+    <div id="civilDawn"></div>
+    <div id="civilDusk"></div>
+    <div id="dayLength"></div>
   </div>
 
   <script>
-    // === Optional basemap keys ===
-    const MAPTILER_KEY = ""; // e.g. 'YOUR_MAPTILER_KEY'
-    const STADIA_KEY   = ""; // e.g. 'YOUR_STADIA_KEY'
-
-    // === Map & Base Layers ===
-    const map = L.map('map');
-    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+    const map = L.map('map').setView([40.4173, -82.9071], 6);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom:19,
+      attribution:'&copy; OpenStreetMap'
     }).addTo(map);
 
-    const baseLayers = { "OpenStreetMap": osm };
-
-    // MapTiler Topographic
-    if (MAPTILER_KEY) {
-      baseLayers["Topo (MapTiler)"] = L.tileLayer(
-        `https://api.maptiler.com/maps/topo-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
-        { attribution: '&copy; OpenStreetMap, &copy; MapTiler', maxZoom: 20 }
-      );
-      // Satellite
-      baseLayers["Satellite (MapTiler)"] = L.tileLayer(
-        `https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`,
-        { attribution: '&copy; MapTiler', maxZoom: 20 }
-      );
-    }
-
-    // Stadia Outdoors (Stamen Outdoors hosted by Stadia Maps)
-    if (STADIA_KEY) {
-      baseLayers["Outdoors (Stadia)"] = L.tileLayer(
-        `https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png?api_key=${STADIA_KEY}`,
-        { attribution: '&copy; Stadia Maps & contributors', maxZoom: 20 }
-      );
-    }
-
-    // Default view: Ohio
-    map.setView([40.4173, -82.9071], 6);
-
-    // === Draw + Persistence ===
+    // Drawing
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
-
-    const drawControl = new L.Control.Draw({
-      position: 'topleft',
-      draw: {
-        marker: true,
-        polyline: { shapeOptions: { color:'#2563eb', weight:4 } },
-        polygon: { allowIntersection:false, showArea:true, shapeOptions:{ color:'#16a34a' } },
-        rectangle: { shapeOptions: { color:'#d97706' } },
-        circle: false
-      },
-      edit: { featureGroup: drawnItems, remove: true }
-    });
-    map.addControl(drawControl);
-
-    const STORAGE_KEY = 'bhh_leaflet_drawings_v1';
-    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
-    function restoreAll(){
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        const geo = JSON.parse(raw);
-        L.geoJSON(geo, { onEachFeature: (_, layer) => drawnItems.addLayer(layer) });
-      } catch(e){ console.warn('Restore failed:', e); }
-    }
+    map.addControl(new L.Control.Draw({ edit:{ featureGroup: drawnItems } }));
 
     map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
     map.on(L.Draw.Event.EDITED, saveAll);
     map.on(L.Draw.Event.DELETED, saveAll);
 
-    // === Public Hunting Lands Overlay ===
-    // 1) Upload your real GeoJSON to this repo, get its RAW URL, then set DATA_URL below.
-    const DATA_URL = "https://raw.githubusercontent.com/joshbhh/buckeyehunterhub-map/main/ohio_public_hunting.geojson";
-    const SAMPLE_GEOJSON = {
-      "type":"FeatureCollection",
-      "features":[{"type":"Feature","properties":{"name":"Sample Public Hunting Area"},
-      "geometry":{"type":"Polygon","coordinates":[[[-83.2,40.7],[-83.0,40.7],[-83.0,40.55],[-83.2,40.55],[-83.2,40.7]]]}}]
+    const STORAGE_KEY = "bhh_drawings";
+    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
+    function restoreAll(){ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ L.geoJSON(JSON.parse(raw), {onEachFeature:(_,l)=>drawnItems.addLayer(l)}); } }
+    restoreAll();
+
+    // Export
+    document.getElementById('btnExport').onclick = () => {
+      const blob = new Blob([JSON.stringify(drawnItems.toGeoJSON(), null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='drawings.geojson'; a.click(); URL.revokeObjectURL(url);
     };
+    // Clear
+    document.getElementById('btnClear').onclick = () => { drawnItems.clearLayers(); saveAll(); };
+    // Import
+    document.getElementById('fileImport').onchange = ev => {
+      const f = ev.target.files[0]; if(!f) return;
+      const reader = new FileReader(); reader.onload = () => {
+        L.geoJSON(JSON.parse(reader.result), {onEachFeature:(_,l)=>drawnItems.addLayer(l)}); saveAll();
+      }; reader.readAsText(f);
+    };
+    // Fullscreen
+    document.getElementById('btnFull').onclick = () => { if(!document.fullscreenElement){ map.getContainer().requestFullscreen(); } else { document.exitFullscreen(); } };
 
-    const publicLandsLayer = L.geoJSON(null, {
-      style: { color:'#8b5cf6', weight:2, fillOpacity:0.18 },
-      onEachFeature: (f, layer) => {
-        const n = (f.properties && (f.properties.name || f.properties.AREA_NAME || f.properties.Title)) || 'Public Hunting Land';
-        layer.bindPopup(n);
-      }
-    });
+    // Public Hunting Lands
+    const publicLandsLayer = L.geoJSON(null, { style:{color:'#8b5cf6', weight:2, fillOpacity:0.2} });
+    const DATA_URL = "https://raw.githubusercontent.com/joshbhh/buckeyehunterhub-map/main/ohio_public_hunting.geojson";
+    fetch(DATA_URL).then(r=>r.json()).then(j=>publicLandsLayer.addData(j));
+    const overlays = { "Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
+    L.control.layers(null, overlays).addTo(map);
 
-    function loadPublicLands(){
-      if (DATA_URL === "SAMPLE") { publicLandsLayer.addData(SAMPLE_GEOJSON); return; }
-      fetch(DATA_URL)
-        .then(r => r.json())
-        .then(geo => publicLandsLayer.addData(geo))
-        .catch(err => { console.warn('Failed to load public lands; using sample.', err); publicLandsLayer.addData(SAMPLE_GEOJSON); });
-    }
-    loadPublicLands();
-
-    // === Layer control ===
-    const overlays = { "Ohio Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
-    L.control.layers(baseLayers, overlays, { collapsed:true }).addTo(map);
-
-    // === Import / Export / Clear / Fullscreen / Geolocate / Print ===
-    document.getElementById('btnExport').addEventListener('click', () => {
-      const data = drawnItems.toGeoJSON();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/geo+json' });
-      const url  = URL.createObjectURL(blob);
-      const a = Object.assign(document.createElement('a'), { href:url, download:'buckeyehunterhub-drawings.geojson' });
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    });
-
-    document.getElementById('btnClear').addEventListener('click', () => { drawnItems.clearLayers(); saveAll(); });
-
-    document.getElementById('fileImport').addEventListener('change', ev => {
-      const file = ev.target.files[0]; if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const geo = JSON.parse(reader.result);
-          L.geoJSON(geo, { onEachFeature:(_,layer)=>drawnItems.addLayer(layer) });
-          saveAll();
-        } catch(e){ alert('Invalid GeoJSON file.'); }
-      };
-      reader.readAsText(file);
-      ev.target.value = '';
-    });
-
-    const mapEl = document.getElementById('map');
-    document.getElementById('btnFull').addEventListener('click', () => {
-      if (!document.fullscreenElement){ mapEl.requestFullscreen?.() || mapEl.webkitRequestFullscreen?.(); }
-      else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); }
-    });
-
-    document.getElementById('btnLocate').addEventListener('click', () => {
-      if (!navigator.geolocation) return alert('Geolocation not supported');
-      navigator.geolocation.getCurrentPosition(
-        pos => map.setView([pos.coords.latitude, pos.coords.longitude], 12),
-        () => alert('Could not get GPS location')
-      );
-    });
-
-    document.getElementById('btnPrint').addEventListener('click', () => window.print());
-
-    // === Shareable link (view + drawings in URL) ===
-    function encodeShare(){
-      const v = map.getCenter(); const z = map.getZoom();
-      const geo = drawnItems.toGeoJSON();
-      const packed = LZString.compressToEncodedURIComponent(JSON.stringify(geo));
-      return `${location.origin}${location.pathname}?z=${z}&lat=${v.lat.toFixed(6)}&lng=${v.lng.toFixed(6)}#s=${packed}`;
-    }
-    function decodeShare(){
-      const params = new URLSearchParams(location.search);
-      const z = Number(params.get('z')), lat = Number(params.get('lat')), lng = Number(params.get('lng'));
-      if (!isNaN(lat) && !isNaN(lng) && !isNaN(z)) map.setView([lat,lng], z);
-      const hash = new URL(location.href).hash;
-      if (hash.startsWith('#s=')){
-        try {
-          const json = LZString.decompressFromEncodedURIComponent(hash.slice(3));
-          const geo = JSON.parse(json);
-          L.geoJSON(geo, { onEachFeature:(_,layer)=>drawnItems.addLayer(layer) });
-        } catch(e){ console.warn('Share decode failed', e); }
-      }
-    }
-    document.getElementById('btnShare').addEventListener('click', async () => {
-      const link = encodeShare();
-      try { await navigator.clipboard.writeText(link); alert('Share link copied to clipboard!'); }
-      catch { prompt('Copy this link:', link); }
-    });
-
-    // === Legal light panel (SunCalc) ===
-    function fmtTime(d){ return d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'; }
-    function dayLen(sr, ss){ if(!sr||!ss) return '—'; const ms = ss - sr; const h = Math.floor(ms/3600000), m = Math.round((ms%3600000)/60000); return `${h}h ${m}m`; }
+    // SunCalc
     function updateSun(){
-      const c = map.getCenter(); const now = new Date();
-      const t = SunCalc.getTimes(now, c.lat, c.lng);
-      document.getElementById('where').textContent = `Lat ${c.lat.toFixed(4)}, Lng ${c.lng.toFixed(4)}`;
-      document.getElementById('sunrise').textContent = fmtTime(t.sunrise);
-      document.getElementById('sunset').textContent  = fmtTime(t.sunset);
-      document.getElementById('civilDawn').textContent = fmtTime(t.dawn);
-      document.getElementById('civilDusk').textContent = fmtTime(t.dusk);
-      document.getElementById('dayLength').textContent = dayLen(t.sunrise, t.sunset);
-      document.getElementById('dateLine').textContent = now.toLocaleDateString();
+      const c = map.getCenter(); const now=new Date(); const t=SunCalc.getTimes(now,c.lat,c.lng);
+      document.getElementById('sunrise').innerText = "Sunrise: " + t.sunrise.toLocaleTimeString();
+      document.getElementById('sunset').innerText  = "Sunset: " + t.sunset.toLocaleTimeString();
+      document.getElementById('civilDawn').innerText = "Civil dawn: " + t.dawn.toLocaleTimeString();
+      document.getElementById('civilDusk').innerText = "Civil dusk: " + t.dusk.toLocaleTimeString();
+      const len=(t.sunset - t.sunrise)/60000; document.getElementById('dayLength').innerText="Day length: "+Math.floor(len/60)+"h "+(len%60|0)+"m";
     }
-    map.on('moveend', updateSun);
-
-    // === Startup sequence ===
-    decodeShare();   // load from URL if present
-    restoreAll();    // or restore local drawings
-    updateSun();
+    updateSun(); map.on('moveend', updateSun);
   </script>
 </body>
 </html>
