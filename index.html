@@ -20,14 +20,17 @@
     html, body { height:100%; margin:0; }
     #map { width:100%; height:100vh; }
 
-    /* Default Leaflet spacing */
+    /* Zoom stays top-left (default) */
     .leaflet-control-zoom { margin-top: 10px; }
+    /* Push draw toolbar down so it doesn’t overlap zoom */
     .leaflet-control-container .leaflet-draw { margin-top: 58px; }
+    /* Layers control bottom-left spacing */
     .leaflet-bottom.leaflet-left .leaflet-control { margin: 0 0 12px 12px; }
 
-    /* Bottom-right toolbar (export/import/save/measure) */
+    /* Bottom-right toolbar */
     .toolbar {
-      position: fixed; bottom: 12px; right: 12px; z-index: 1000;
+      position: fixed;
+      bottom: 12px; right: 12px; z-index: 1000;
       background: #fff; border-radius: 12px; padding: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,.2);
       font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
@@ -40,7 +43,7 @@
     }
     .toolbar input[type="file"] { display: none; }
 
-    /* Marker palette (mobile-friendly horizontal scroll) */
+    /* Marker palette */
     .palette {
       display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
       scrollbar-width: thin;
@@ -62,7 +65,7 @@
     }
     .panel h3 { margin: 0 0 6px; font-size: 15px; }
 
-    /* Markers list (left, collapsible) */
+    /* Markers list (left) */
     .list {
       position: fixed; left: 12px; bottom: 12px; z-index: 950;
       background:#fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
@@ -81,20 +84,30 @@
     .row .left { display:flex; align-items:center; gap:8px; }
     .muted { color:#666; font-size:12px; }
 
-    /* Locate button (floating) */
-    .locate {
-      position: fixed; left: 12px; top: 12px; z-index: 950;
+    /* Locate + Fullscreen-open buttons (top-left under zoom/draw) */
+    .quick {
+      position: fixed; left: 12px; top: 110px; z-index: 950;
+      display:flex; gap:8px; flex-direction: column;
+    }
+    .quick button {
       background:#fff; border:1px solid #ddd; border-radius: 999px;
       padding:8px 12px; box-shadow:0 2px 8px rgba(0,0,0,.15); cursor:pointer;
-      display:flex; align-items:center; gap:6px; font:14px system-ui;
+      font:14px system-ui;
     }
 
-    /* Mobile adjustments */
+    /* Error banner */
+    .err {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 0; z-index: 2000; background:#b91c1c; color:#fff;
+      padding: 6px 10px; border-radius: 8px 8px 0 0; font: 13px system-ui;
+      display: none; max-width: 92vw;
+    }
+
     @media (max-width: 640px) {
       .panel { top: 58px; right: 8px; max-width: 88vw; }
       .list { left: 8px; right: 8px; width: auto; bottom: 90px; max-height: 30vh; }
       .toolbar { left: 8px; right: 8px; bottom: 8px; justify-content: center; }
-      .locate { top: 8px; left: 8px; }
+      .quick { top: 96px; left: 8px; }
       .leaflet-control-container .leaflet-draw { margin-top: 54px; }
     }
   </style>
@@ -102,21 +115,22 @@
 <body>
   <div id="map"></div>
 
-  <!-- Floating locate button -->
-  <button class="locate" id="btnLocate" title="Use my location">📍 Locate</button>
+  <!-- Quick actions -->
+  <div class="quick">
+    <button id="btnLocate" title="Use my location">📍 Locate</button>
+    <button id="btnOpenTab" title="Open map in a new tab">↗️ Open Fullscreen</button>
+  </div>
 
   <!-- Markers list -->
   <div class="list" id="markerList">
     <header>
       <div>Markers</div>
-      <div>
-        <button id="btnClearMarkers" title="Remove all markers">Clear</button>
-      </div>
+      <div><button id="btnClearMarkers" title="Remove all markers">Clear</button></div>
     </header>
     <div class="items" id="markerItems"></div>
   </div>
 
-  <!-- Bottom-right toolbar (multi-area + IO + measure + palette) -->
+  <!-- Bottom-right toolbar -->
   <div class="toolbar">
     <div class="palette" title="Tap a type, then tap the map to place">
       <button class="chip" data-type="scrape"><span class="emoji">🦌</span> Scrape</button>
@@ -125,16 +139,14 @@
       <button class="chip" data-type="rub"><span class="emoji">🪵</span> Rub</button>
     </div>
 
-    <select id="areaSelect" title="Hunting area">
-      <option value="default">Default Area</option>
-    </select>
+    <select id="areaSelect" title="Hunting area"><option value="default">Default Area</option></select>
     <button id="btnNewArea" title="Create new hunting area">New Area</button>
     <button id="btnSaveArea" title="Save current area">Save Area</button>
 
     <button id="btnMeasure" title="Measure distance (click 2 points)">Measure</button>
-    <button id="btnExport" title="Download drawings as GeoJSON">Export</button>
-    <button id="btnClear" title="Clear all drawings">Clear</button>
-    <label for="fileImport" title="Import a GeoJSON file">Import</label>
+    <button id="btnExport" title="Download drawings + markers">Export</button>
+    <button id="btnClear" title="Clear drawings + markers">Clear</button>
+    <label for="fileImport" title="Import a JSON/GeoJSON file">Import</label>
     <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json"/>
     <button id="btnFull" title="Toggle fullscreen">Fullscreen</button>
   </div>
@@ -149,31 +161,30 @@
     <div id="dayLength"></div>
   </div>
 
+  <!-- Error banner -->
+  <div class="err" id="err"></div>
+
   <script>
-    // ----- Map & basemaps -----
+    // Simple error banner for quick diagnosis
+    window.addEventListener('error', (e) => {
+      const el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = 'Error: ' + (e.message || 'script error');
+      console.error(e.error || e.message);
+    });
+
+    // ---- Map ----
     const map = L.map('map').setView([40.4173, -82.9071], 6);
     const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    // Optional extra basemaps (toggle in control)
-    const toner = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {
-      maxZoom: 20, attribution: '&copy; Stamen, OpenStreetMap'
-    });
-    const terrain = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg', {
-      maxZoom: 18, attribution: '&copy; Stamen, OpenStreetMap'
-    });
-
-    // ----- Draw layer -----
+    // ---- Draw Layer ----
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
-    map.addControl(new L.Control.Draw({
-      position: 'topleft',
-      edit: { featureGroup: drawnItems },
-      draw: { circle: false }
-    }));
+    map.addControl(new L.Control.Draw({ position:'topleft', edit:{ featureGroup: drawnItems }, draw:{ circle:false } }));
 
-    // ----- Markers layer (custom icons) -----
+    // ---- Custom Markers ----
     const markersLayer = L.featureGroup().addTo(map);
     const markerTypes = {
       scrape: { label: 'Scrape', emoji: '🦌' },
@@ -184,125 +195,105 @@
     function makeDivIcon(emoji) {
       return L.divIcon({
         className: 'bhh-divicon',
-        html: `<div style="
-          background:#fff;border:1px solid #ccc;border-radius:12px;padding:2px 6px;
-          box-shadow:0 1px 4px rgba(0,0,0,.2);font-size:18px;line-height:1">${emoji}</div>`,
+        html: `<div style="background:#fff;border:1px solid #ccc;border-radius:12px;padding:2px 6px;box-shadow:0 1px 4px rgba(0,0,0,.2);font-size:18px;line-height:1">${emoji}</div>`,
         iconSize: [28,28], iconAnchor: [14,14]
       });
     }
 
-    // ----- Persistence (per area) -----
-    const STORAGE_AREAS = 'bhh_areas_v1';   // { areaName: { drawings: GeoJSON, markers: [{type,lat,lng,note}...], view:{lat,lng,z} } }
+    // ---- Areas (localStorage) ----
+    const STORAGE_AREAS = 'bhh_areas_v1';
     const areaSelect = document.getElementById('areaSelect');
     const btnNewArea = document.getElementById('btnNewArea');
     const btnSaveArea = document.getElementById('btnSaveArea');
 
-    function loadAreas() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_AREAS)) || { default: {} }; }
-      catch { return { default: {} }; }
-    }
-    function saveAreas(areas) {
-      localStorage.setItem(STORAGE_AREAS, JSON.stringify(areas));
-    }
-    function refreshAreaDropdown(areas, currentName) {
+    function loadAreas(){ try { return JSON.parse(localStorage.getItem(STORAGE_AREAS)) || { default:{} }; } catch { return { default:{} }; } }
+    function saveAreas(a){ localStorage.setItem(STORAGE_AREAS, JSON.stringify(a)); }
+    function refreshAreaDropdown(a, current){
       areaSelect.innerHTML = '';
-      Object.keys(areas).forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name; opt.textContent = name;
-        if (name === currentName) opt.selected = true;
-        areaSelect.appendChild(opt);
+      Object.keys(a).forEach(name => {
+        const opt = document.createElement('option'); opt.value=name; opt.textContent=name;
+        if (name===current) opt.selected = true; areaSelect.appendChild(opt);
       });
     }
-
-    let areas = loadAreas();
-    if (!areas.default) areas.default = {};
+    let areas = loadAreas(); if (!areas.default) areas.default = {};
     refreshAreaDropdown(areas, 'default');
 
-    function serializeMarkers() {
-      const list = [];
-      markersLayer.eachLayer(m => {
-        const { type, note } = m.options || {};
-        const { lat, lng } = m.getLatLng();
-        list.push({ type, note: note || '', lat, lng });
-      });
+    function serializeMarkers(){
+      const list=[]; markersLayer.eachLayer(m => { const {type,note}=m.options||{}; const {lat,lng}=m.getLatLng(); list.push({type, note:note||'', lat, lng}); });
       return list;
     }
-    function deserializeMarkers(list) {
+    function deserializeMarkers(list){
       markersLayer.clearLayers();
-      (list || []).forEach(m => {
+      (list||[]).forEach(m=>{
         const ic = makeDivIcon((markerTypes[m.type]||{}).emoji || '📍');
-        const layer = L.marker([m.lat, m.lng], { icon: ic, type: m.type, note: m.note || '' })
-          .bindPopup(`<b>${(markerTypes[m.type]||{}).label||'Marker'}</b><br>${m.note || ''}`);
-        markersLayer.addLayer(layer);
+        L.marker([m.lat,m.lng], {icon:ic, type:m.type, note:m.note||''})
+          .addTo(markersLayer)
+          .bindPopup(`<b>${(markerTypes[m.type]||{}).label||'Marker'}</b><br>${m.note||''}`);
       });
       renderMarkerList();
     }
 
-    function applyArea(name) {
+    function applyArea(name){
       const a = areas[name] || {};
-      // drawings
       drawnItems.clearLayers();
       if (a.drawings) L.geoJSON(a.drawings, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
-      // markers
       deserializeMarkers(a.markers);
-      // view
       if (a.view) map.setView([a.view.lat, a.view.lng], a.view.z);
     }
-
-    function saveCurrentArea(name) {
-      const center = map.getCenter();
-      areas[name] = {
-        drawings: drawnItems.toGeoJSON(),
-        markers: serializeMarkers(),
-        view: { lat: center.lat, lng: center.lng, z: map.getZoom() }
-      };
-      saveAreas(areas);
-      refreshAreaDropdown(areas, name);
-      alert(`Saved area: ${name}`);
+    function saveCurrentArea(name){
+      const c = map.getCenter();
+      areas[name] = { drawings: drawnItems.toGeoJSON(), markers: serializeMarkers(), view:{lat:c.lat,lng:c.lng,z:map.getZoom()} };
+      saveAreas(areas); refreshAreaDropdown(areas, name); alert(`Saved area: ${name}`);
     }
-
-    // initial apply
     applyArea('default');
 
     btnNewArea.onclick = () => {
-      const name = prompt('Name this hunting area:');
-      if (!name) return;
-      if (areas[name]) { alert('That name already exists.'); return; }
-      areas[name] = {};
-      saveAreas(areas);
-      refreshAreaDropdown(areas, name);
-      // start fresh for new area
-      drawnItems.clearLayers();
-      markersLayer.clearLayers();
-      renderMarkerList();
+      const name = prompt('Name this hunting area:'); if (!name) return;
+      if (areas[name]) return alert('That name already exists.');
+      areas[name] = {}; saveAreas(areas); refreshAreaDropdown(areas, name);
+      drawnItems.clearLayers(); markersLayer.clearLayers(); renderMarkerList();
     };
     btnSaveArea.onclick = () => saveCurrentArea(areaSelect.value);
     areaSelect.onchange = () => applyArea(areaSelect.value);
 
-    // ----- Draw events (save into current area’s local cache) -----
-    const STORAGE_DRAWINGS = 'bhh_drawings_tmp'; // deprecated single-area, kept for backwards restore
+    // Legacy temp drawings save (no longer primary)
+    const STORAGE_DRAWINGS = 'bhh_drawings_tmp';
     function saveAll(){ localStorage.setItem(STORAGE_DRAWINGS, JSON.stringify(drawnItems.toGeoJSON())); }
-    function restoreLegacy(){
-      const raw = localStorage.getItem(STORAGE_DRAWINGS);
-      if (raw) L.geoJSON(JSON.parse(raw), { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
-    }
+    function restoreLegacy(){ const raw = localStorage.getItem(STORAGE_DRAWINGS); if (raw) L.geoJSON(JSON.parse(raw), { onEachFeature:(_,l)=>drawnItems.addLayer(l) }); }
     map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
     map.on(L.Draw.Event.EDITED, saveAll);
     map.on(L.Draw.Event.DELETED, saveAll);
 
-    // ----- Public Hunting Lands (ODNR) + Ohio Counties (ODOT) -----
+    // ---- Data layers: try LOCAL first (Wix-friendly), then fall back to state services ----
     const publicLandsLayer = L.geoJSON(null, { style:{ color:'#8b5cf6', weight:2, fillOpacity:0.2 } });
-    fetch('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson')
-      .then(r => r.json()).then(j => publicLandsLayer.addData(j))
-      .catch(err => console.warn('ODNR layer load failed:', err));
+    const countiesLayer    = L.geoJSON(null, { style:{ color:'#555', weight:1, fill:false } });
 
-    const countiesLayer = L.geoJSON(null, { style:{ color:'#555', weight:1, fill:false } });
-    fetch('https://gis.dot.state.oh.us/arcgis/rest/services/Basemap/ODOT_Basemap/MapServer/165/query?where=1=1&outFields=County_Name&f=geojson')
-      .then(r => r.json()).then(j => countiesLayer.addData(j))
-      .catch(err => console.warn('Counties load failed:', err));
+    const LOCAL_ODNR  = './ohio_public_hunting.geojson';
+    const LOCAL_COUNT = './ohio_counties.geojson';
+    const ODNR_URL = 'https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson';
+    const ODOT_URL = 'https://gis.dot.state.oh.us/arcgis/rest/services/Basemap/ODOT_Basemap/MapServer/165/query?where=1=1&outFields=County_Name&f=geojson';
 
-    // ----- Layers control -----
-    const baseMaps = { 'OpenStreetMap': osm, 'Toner Lite': toner, 'Terrain': terrain };
+    function loadGeoJSONFirstLocal(layer, localURL, remoteURL, tag){
+      fetch(localURL)
+        .then(r => { if (!r.ok) throw new Error('local missing'); return r.json(); })
+        .then(j => layer.addData(j))
+        .catch(() => fetch(remoteURL)
+          .then(r => r.json())
+          .then(j => layer.addData(j))
+          .catch(err => { console.warn(tag+' load failed:', err); showErr(tag+' failed to load'); }));
+    }
+    function showErr(msg){
+      const el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = msg;
+      setTimeout(()=>{ el.style.display='none'; }, 6000);
+    }
+
+    loadGeoJSONFirstLocal(publicLandsLayer, LOCAL_ODNR, ODNR_URL, 'Public Lands');
+    loadGeoJSONFirstLocal(countiesLayer,    LOCAL_COUNT, ODOT_URL, 'Counties');
+
+    // ---- Layers control ----
+    const baseMaps = { 'OpenStreetMap': osm };
     const overlays = {
       'Public Hunting Lands': publicLandsLayer,
       'Ohio Counties': countiesLayer,
@@ -311,7 +302,7 @@
     };
     L.control.layers(baseMaps, overlays, { position: 'bottomleft' }).addTo(map);
 
-    // ----- Legal Light -----
+    // ---- Legal Light ----
     function updateSun(){
       const c = map.getCenter(), now = new Date(), t = SunCalc.getTimes(now, c.lat, c.lng);
       const fmt = d => d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
@@ -324,12 +315,9 @@
     }
     updateSun(); map.on('moveend', updateSun);
 
-    // ----- Toolbar actions (export/import/fullscreen) -----
+    // ---- IO buttons ----
     document.getElementById('btnExport').onclick = () => {
-      const data = {
-        drawings: drawnItems.toGeoJSON(),
-        markers: serializeMarkers()
-      };
+      const data = { drawings: drawnItems.toGeoJSON(), markers: serializeMarkers() };
       const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/geo+json'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'buckeyehunterhub-export.json';
@@ -360,7 +348,7 @@
       if (!document.fullscreenElement) { el.requestFullscreen?.(); } else { document.exitFullscreen?.(); }
     };
 
-    // ----- Locate me -----
+    // ---- Locate (note: Wix iframe may block; new-tab button helps) ----
     document.getElementById('btnLocate').onclick = () => {
       if (!navigator.geolocation) return alert('Geolocation not supported');
       navigator.geolocation.getCurrentPosition(
@@ -370,15 +358,16 @@
           L.circleMarker([latitude, longitude], { radius:8, color:'#2563eb', fillColor:'#3b82f6', fillOpacity:.6 })
             .addTo(map).bindPopup('You are here').openPopup();
         },
-        err => alert('Could not get location: ' + err.message),
+        err => alert('Could not get location (browser/host blocked): ' + err.message),
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     };
+    document.getElementById('btnOpenTab').onclick = () => window.open(location.href, '_blank');
 
-    // ----- Measure tool (click two points) -----
+    // ---- Measure tool (two clicks) ----
     const btnMeasure = document.getElementById('btnMeasure');
     let measuring = false, measurePts = [], measureLine = null, measureLabel = null;
-    function resetMeasure() {
+    function resetMeasure(){
       measurePts = [];
       if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
       if (measureLabel) { map.removeLayer(measureLabel); measureLabel = null; }
@@ -392,49 +381,41 @@
       if (!measuring) return;
       measurePts.push(e.latlng);
       if (measurePts.length === 2) {
-        const dist = map.distance(measurePts[0], measurePts[1]); // meters
+        const dist = map.distance(measurePts[0], measurePts[1]);
         const yards = dist * 1.09361;
         if (measureLine) map.removeLayer(measureLine);
         measureLine = L.polyline(measurePts, { color:'#2563eb', weight:4, dashArray:'6,6' }).addTo(map);
-        const mid = L.latLng(
-          (measurePts[0].lat + measurePts[1].lat)/2,
-          (measurePts[0].lng + measurePts[1].lng)/2
-        );
+        const mid = L.latLng((measurePts[0].lat + measurePts[1].lat)/2, (measurePts[0].lng + measurePts[1].lng)/2);
         if (measureLabel) map.removeLayer(measureLabel);
         measureLabel = L.marker(mid, { icon: L.divIcon({ className:'', html:
           `<div style="background:#111;color:#fff;padding:4px 8px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25);font:13px system-ui">
              ${yards.toFixed(0)} yd (${dist.toFixed(0)} m)
            </div>` })}).addTo(map);
-        // Finish measuring
-        measuring = false; btnMeasure.textContent = 'Measure';
-        measurePts = [];
+        measuring = false; btnMeasure.textContent = 'Measure'; measurePts = [];
       }
     });
 
-    // ----- Marker palette placement -----
+    // ---- Marker palette ----
     let activeType = null;
     document.querySelectorAll('.chip').forEach(b => {
       b.onclick = () => {
         activeType = b.getAttribute('data-type');
-        // visual feedback
         document.querySelectorAll('.chip').forEach(x => x.style.background = '#fff');
         b.style.background = '#eef2ff';
       };
     });
     map.on('click', (e) => {
       if (!activeType) return;
-      // place marker of that type
       const t = activeType, cfg = markerTypes[t];
-      const m = L.marker(e.latlng, { icon: makeDivIcon(cfg.emoji), type: t, note: '' })
+      L.marker(e.latlng, { icon: makeDivIcon(cfg.emoji), type: t, note: '' })
         .addTo(markersLayer).bindPopup(`<b>${cfg.label}</b>`);
       renderMarkerList();
-      // keep type active for rapid placement
     });
 
-    // ----- Marker list UI -----
+    // ---- Marker list ----
     const markerItems = document.getElementById('markerItems');
     const btnClearMarkers = document.getElementById('btnClearMarkers');
-    function renderMarkerList() {
+    function renderMarkerList(){
       markerItems.innerHTML = '';
       let idx = 0;
       markersLayer.eachLayer(m => {
@@ -460,10 +441,8 @@
     }
     btnClearMarkers.onclick = () => { markersLayer.clearLayers(); renderMarkerList(); };
 
-    // Initial legacy restore if any old single-area drawings exist
-    restoreLegacy();
-    // Initial list render
-    renderMarkerList();
+    // Initial legacy restore and list render
+    restoreLegacy(); renderMarkerList();
   </script>
 </body>
 </html>
