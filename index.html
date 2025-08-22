@@ -1,63 +1,165 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Buckeye Hunter Hub Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Mapbox libraries -->
-  <script src="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.js"></script>
-  <link href="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.css" rel="stylesheet" />
-  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.0/mapbox-gl-draw.js"></script>
-  <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.0/mapbox-gl-draw.css" rel="stylesheet" />
+  <meta charset="utf-8" />
+  <title>Buckeye Hunter Hub – Leaflet Hunting Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet core -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet.draw plugin -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <style>
-    html, body { margin:0; padding:0; height:100%; }
-    #map { width:100%; height:100vh; }
+    html, body { height: 100%; margin: 0; }
+    #map { width: 100%; height: 100vh; }
+    .toolbar {
+      position: fixed; z-index: 1000; top: 10px; left: 10px;
+      background: #ffffff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      padding: 8px 10px; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      display: flex; gap: 8px; align-items: center;
+    }
+    .toolbar button, .toolbar label {
+      cursor: pointer; border: 1px solid #ddd; border-radius: 8px; padding: 6px 10px; background: #f9f9f9;
+    }
+    .toolbar button:hover, .toolbar label:hover { background: #f1f1f1; }
+    .toolbar input[type="file"] { display: none; }
+    .attribution-note {
+      position: fixed; bottom: 8px; left: 8px; font: 12px system-ui; background: rgba(255,255,255,.8);
+      padding: 4px 6px; border-radius: 6px;
+    }
+    @media (max-width: 600px) {
+      .toolbar { left: 50%; transform: translateX(-50%); top: 8px; }
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
+  <div class="toolbar">
+    <button id="btnExport" title="Download your drawings as GeoJSON">Export GeoJSON</button>
+    <button id="btnClear" title="Clear all drawings from the map">Clear</button>
+    <label for="fileImport" title="Import a GeoJSON file you exported earlier">Import GeoJSON</label>
+    <input type="file" id="fileImport" accept=".json,.geojson,application/geo+json,application/json"/>
+    <button id="btnFull" title="Toggle fullscreen">Fullscreen</button>
+  </div>
+
+  <div id="note" class="attribution-note">
+    Tiles &copy; <a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a> contributors
+  </div>
+
   <script>
-    // Your Mapbox access token
-    mapboxgl.accessToken = 'pk.eyJ1Ijoic2hvZmZuZXJqIiwiYSI6ImNtZW05N2V3eTBvYW0ybW9qZDhkZWQ1amMifQ.DbOSBeDHttvsa4vYr2S1SA';
+    // Initialize map centered on Ohio
+    const map = L.map('map').setView([40.4173, -82.9071], 6);
 
-    // Initialize the map centered on Ohio
-    const map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/outdoors-v12',
-      center: [-82.9071, 40.4173],
-      zoom: 6
-    });
+    // OSM tile layer (free; respect their usage policy)
+    const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
 
-    // Navigation controls
-    map.addControl(new mapboxgl.NavigationControl());
+    // FeatureGroup for drawn items
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
 
-    // Drawing tools (markers, trails, polygons)
-    const Draw = new MapboxDraw({
-      displayControlsDefault: false,
-      controls: {
-        point: true,
-        line_string: true,
-        polygon: true,
-        trash: true
+    // Draw control
+    const drawControl = new L.Control.Draw({
+      position: 'topleft',
+      draw: {
+        polyline: { shapeOptions: { color: '#2b6cb0', weight: 4 } },
+        polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#2f855a' } },
+        rectangle: { shapeOptions: { color: '#d69e2e' } },
+        circle: false, // circles less useful for land boundaries
+        marker: true
+      },
+      edit: {
+        featureGroup: drawnItems,
+        remove: true
       }
     });
-    map.addControl(Draw);
+    map.addControl(drawControl);
 
-    // Example marker
-    new mapboxgl.Marker({ color: "green" })
-      .setLngLat([-82.9, 40.4])
-      .setPopup(new mapboxgl.Popup().setText("Sample Hunting Spot"))
-      .addTo(map);
+    // Sample marker (you can remove this block if you want a blank map)
+    L.marker([40.4, -82.9]).addTo(map).bindPopup('Sample Hunting Spot');
 
-    // Log user drawings
-    function update() {
-      const data = Draw.getAll();
-      console.log("User drew:", data);
+    // Local storage keys
+    const STORAGE_KEY = 'bhh_leaflet_drawings_v1';
+
+    // Restore drawings from localStorage
+    function restore() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const geojson = JSON.parse(raw);
+        L.geoJSON(geojson, {
+          onEachFeature: (feature, layer) => drawnItems.addLayer(layer)
+        });
+      } catch (e) { console.warn('Restore failed:', e); }
     }
-    map.on('draw.create', update);
-    map.on('draw.update', update);
-    map.on('draw.delete', update);
+    restore();
+
+    // Save drawings to localStorage
+    function save() {
+      const all = drawnItems.toGeoJSON();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    }
+
+    // Handle created/edited/deleted events
+    map.on(L.Draw.Event.CREATED, (e) => {
+      const layer = e.layer;
+      drawnItems.addLayer(layer);
+      save();
+    });
+    map.on(L.Draw.Event.EDITED, save);
+    map.on(L.Draw.Event.DELETED, save);
+
+    // Export GeoJSON
+    document.getElementById('btnExport').addEventListener('click', () => {
+      const data = drawnItems.toGeoJSON();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/geo+json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'buckeyehunterhub-drawings.geojson';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // Clear drawings
+    document.getElementById('btnClear').addEventListener('click', () => {
+      drawnItems.clearLayers();
+      save();
+    });
+
+    // Import GeoJSON
+    document.getElementById('fileImport').addEventListener('change', (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const geo = JSON.parse(reader.result);
+          L.geoJSON(geo, {
+            onEachFeature: (feature, layer) => drawnItems.addLayer(layer)
+          });
+          save();
+        } catch (e) { alert('Invalid GeoJSON file.'); }
+      };
+      reader.readAsText(file);
+      ev.target.value = '';
+    });
+
+    // Fullscreen toggle
+    const mapEl = document.getElementById('map');
+    document.getElementById('btnFull').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        mapEl.requestFullscreen?.() || mapEl.webkitRequestFullscreen?.();
+      } else {
+        document.exitFullscreen?.() || document.webkitExitFullscreen?.();
+      }
+    });
   </script>
 </body>
 </html>
