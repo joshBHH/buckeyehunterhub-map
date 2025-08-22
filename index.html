@@ -20,57 +20,123 @@
     html, body { height:100%; margin:0; }
     #map { width:100%; height:100vh; }
 
-    /* Zoom stays top-left (default) */
+    /* Default Leaflet spacing */
     .leaflet-control-zoom { margin-top: 10px; }
-
-    /* Push draw toolbar down so it doesn’t overlap zoom */
     .leaflet-control-container .leaflet-draw { margin-top: 58px; }
-
-    /* Layers control at bottom-left with some breathing room */
     .leaflet-bottom.leaflet-left .leaflet-control { margin: 0 0 12px 12px; }
 
-    /* Save/Load toolbar (bottom-right) */
+    /* Bottom-right toolbar (export/import/save/measure) */
     .toolbar {
-      position: fixed;
-      bottom: 12px; right: 12px; z-index: 1000;
-      background: #fff; border-radius: 10px; padding: 8px;
+      position: fixed; bottom: 12px; right: 12px; z-index: 1000;
+      background: #fff; border-radius: 12px; padding: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,.2);
       font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
       display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+      max-width: min(96vw, 740px);
     }
-    .toolbar button, .toolbar label {
+    .toolbar button, .toolbar label, .toolbar select {
       margin: 0; padding: 6px 10px; cursor: pointer;
       border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;
     }
     .toolbar input[type="file"] { display: none; }
 
-    /* Legal Light panel (top-right) */
+    /* Marker palette (mobile-friendly horizontal scroll) */
+    .palette {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+      scrollbar-width: thin;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border:1px solid #ddd; border-radius: 999px; background:#fff;
+      white-space: nowrap;
+    }
+    .emoji { font-size: 18px; line-height: 1; }
+
+    /* Legal Light (top-right) */
     .panel {
-      position: fixed;
-      top: 12px; right: 12px; z-index: 900;
-      background: #fff; border-radius: 10px; padding: 8px 10px;
+      position: fixed; top: 12px; right: 12px; z-index: 900;
+      background: #fff; border-radius: 12px; padding: 8px 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,.2);
-      max-width: 260px;
+      max-width: 280px;
       font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
     .panel h3 { margin: 0 0 6px; font-size: 15px; }
 
-    /* Small screens: move legal light down slightly */
+    /* Markers list (left, collapsible) */
+    .list {
+      position: fixed; left: 12px; bottom: 12px; z-index: 950;
+      background:#fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+      max-height: 38vh; width: 280px; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .list header {
+      display:flex; align-items:center; justify-content: space-between; gap:8px;
+      padding: 8px 10px; border-bottom:1px solid #eee; font-weight: 600;
+    }
+    .list .items { overflow-y: auto; }
+    .row {
+      display:flex; align-items:center; justify-content: space-between; gap:8px;
+      padding:8px 10px; border-bottom:1px solid #f3f3f3; cursor:pointer;
+    }
+    .row:hover { background:#fafafa; }
+    .row .left { display:flex; align-items:center; gap:8px; }
+    .muted { color:#666; font-size:12px; }
+
+    /* Locate button (floating) */
+    .locate {
+      position: fixed; left: 12px; top: 12px; z-index: 950;
+      background:#fff; border:1px solid #ddd; border-radius: 999px;
+      padding:8px 12px; box-shadow:0 2px 8px rgba(0,0,0,.15); cursor:pointer;
+      display:flex; align-items:center; gap:6px; font:14px system-ui;
+    }
+
+    /* Mobile adjustments */
     @media (max-width: 640px) {
-      .panel { top: 56px; }
+      .panel { top: 58px; right: 8px; max-width: 88vw; }
+      .list { left: 8px; right: 8px; width: auto; bottom: 90px; max-height: 30vh; }
+      .toolbar { left: 8px; right: 8px; bottom: 8px; justify-content: center; }
+      .locate { top: 8px; left: 8px; }
+      .leaflet-control-container .leaflet-draw { margin-top: 54px; }
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Bottom-right toolbar -->
+  <!-- Floating locate button -->
+  <button class="locate" id="btnLocate" title="Use my location">📍 Locate</button>
+
+  <!-- Markers list -->
+  <div class="list" id="markerList">
+    <header>
+      <div>Markers</div>
+      <div>
+        <button id="btnClearMarkers" title="Remove all markers">Clear</button>
+      </div>
+    </header>
+    <div class="items" id="markerItems"></div>
+  </div>
+
+  <!-- Bottom-right toolbar (multi-area + IO + measure + palette) -->
   <div class="toolbar">
-    <button id="btnExport">Export</button>
-    <button id="btnClear">Clear</button>
-    <label for="fileImport">Import</label>
+    <div class="palette" title="Tap a type, then tap the map to place">
+      <button class="chip" data-type="scrape"><span class="emoji">🦌</span> Scrape</button>
+      <button class="chip" data-type="stand"><span class="emoji">🎯</span> Stand</button>
+      <button class="chip" data-type="camera"><span class="emoji">📷</span> Camera</button>
+      <button class="chip" data-type="rub"><span class="emoji">🪵</span> Rub</button>
+    </div>
+
+    <select id="areaSelect" title="Hunting area">
+      <option value="default">Default Area</option>
+    </select>
+    <button id="btnNewArea" title="Create new hunting area">New Area</button>
+    <button id="btnSaveArea" title="Save current area">Save Area</button>
+
+    <button id="btnMeasure" title="Measure distance (click 2 points)">Measure</button>
+    <button id="btnExport" title="Download drawings as GeoJSON">Export</button>
+    <button id="btnClear" title="Clear all drawings">Clear</button>
+    <label for="fileImport" title="Import a GeoJSON file">Import</label>
     <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json"/>
-    <button id="btnFull">Fullscreen</button>
+    <button id="btnFull" title="Toggle fullscreen">Fullscreen</button>
   </div>
 
   <!-- Top-right Legal Light -->
@@ -84,13 +150,21 @@
   </div>
 
   <script>
-    // Base map
+    // ----- Map & basemaps -----
     const map = L.map('map').setView([40.4173, -82.9071], 6);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    // Drawing
+    // Optional extra basemaps (toggle in control)
+    const toner = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '&copy; Stamen, OpenStreetMap'
+    });
+    const terrain = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg', {
+      maxZoom: 18, attribution: '&copy; Stamen, OpenStreetMap'
+    });
+
+    // ----- Draw layer -----
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
     map.addControl(new L.Control.Draw({
@@ -99,71 +173,145 @@
       draw: { circle: false }
     }));
 
-    // Save to localStorage
-    const STORAGE_KEY = "bhh_drawings";
-    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
-    function restoreAll(){
-      const raw = localStorage.getItem(STORAGE_KEY);
+    // ----- Markers layer (custom icons) -----
+    const markersLayer = L.featureGroup().addTo(map);
+    const markerTypes = {
+      scrape: { label: 'Scrape', emoji: '🦌' },
+      stand:  { label: 'Stand',  emoji: '🎯' },
+      camera: { label: 'Camera', emoji: '📷' },
+      rub:    { label: 'Rub',    emoji: '🪵' }
+    };
+    function makeDivIcon(emoji) {
+      return L.divIcon({
+        className: 'bhh-divicon',
+        html: `<div style="
+          background:#fff;border:1px solid #ccc;border-radius:12px;padding:2px 6px;
+          box-shadow:0 1px 4px rgba(0,0,0,.2);font-size:18px;line-height:1">${emoji}</div>`,
+        iconSize: [28,28], iconAnchor: [14,14]
+      });
+    }
+
+    // ----- Persistence (per area) -----
+    const STORAGE_AREAS = 'bhh_areas_v1';   // { areaName: { drawings: GeoJSON, markers: [{type,lat,lng,note}...], view:{lat,lng,z} } }
+    const areaSelect = document.getElementById('areaSelect');
+    const btnNewArea = document.getElementById('btnNewArea');
+    const btnSaveArea = document.getElementById('btnSaveArea');
+
+    function loadAreas() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_AREAS)) || { default: {} }; }
+      catch { return { default: {} }; }
+    }
+    function saveAreas(areas) {
+      localStorage.setItem(STORAGE_AREAS, JSON.stringify(areas));
+    }
+    function refreshAreaDropdown(areas, currentName) {
+      areaSelect.innerHTML = '';
+      Object.keys(areas).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        if (name === currentName) opt.selected = true;
+        areaSelect.appendChild(opt);
+      });
+    }
+
+    let areas = loadAreas();
+    if (!areas.default) areas.default = {};
+    refreshAreaDropdown(areas, 'default');
+
+    function serializeMarkers() {
+      const list = [];
+      markersLayer.eachLayer(m => {
+        const { type, note } = m.options || {};
+        const { lat, lng } = m.getLatLng();
+        list.push({ type, note: note || '', lat, lng });
+      });
+      return list;
+    }
+    function deserializeMarkers(list) {
+      markersLayer.clearLayers();
+      (list || []).forEach(m => {
+        const ic = makeDivIcon((markerTypes[m.type]||{}).emoji || '📍');
+        const layer = L.marker([m.lat, m.lng], { icon: ic, type: m.type, note: m.note || '' })
+          .bindPopup(`<b>${(markerTypes[m.type]||{}).label||'Marker'}</b><br>${m.note || ''}`);
+        markersLayer.addLayer(layer);
+      });
+      renderMarkerList();
+    }
+
+    function applyArea(name) {
+      const a = areas[name] || {};
+      // drawings
+      drawnItems.clearLayers();
+      if (a.drawings) L.geoJSON(a.drawings, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
+      // markers
+      deserializeMarkers(a.markers);
+      // view
+      if (a.view) map.setView([a.view.lat, a.view.lng], a.view.z);
+    }
+
+    function saveCurrentArea(name) {
+      const center = map.getCenter();
+      areas[name] = {
+        drawings: drawnItems.toGeoJSON(),
+        markers: serializeMarkers(),
+        view: { lat: center.lat, lng: center.lng, z: map.getZoom() }
+      };
+      saveAreas(areas);
+      refreshAreaDropdown(areas, name);
+      alert(`Saved area: ${name}`);
+    }
+
+    // initial apply
+    applyArea('default');
+
+    btnNewArea.onclick = () => {
+      const name = prompt('Name this hunting area:');
+      if (!name) return;
+      if (areas[name]) { alert('That name already exists.'); return; }
+      areas[name] = {};
+      saveAreas(areas);
+      refreshAreaDropdown(areas, name);
+      // start fresh for new area
+      drawnItems.clearLayers();
+      markersLayer.clearLayers();
+      renderMarkerList();
+    };
+    btnSaveArea.onclick = () => saveCurrentArea(areaSelect.value);
+    areaSelect.onchange = () => applyArea(areaSelect.value);
+
+    // ----- Draw events (save into current area’s local cache) -----
+    const STORAGE_DRAWINGS = 'bhh_drawings_tmp'; // deprecated single-area, kept for backwards restore
+    function saveAll(){ localStorage.setItem(STORAGE_DRAWINGS, JSON.stringify(drawnItems.toGeoJSON())); }
+    function restoreLegacy(){
+      const raw = localStorage.getItem(STORAGE_DRAWINGS);
       if (raw) L.geoJSON(JSON.parse(raw), { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
     }
-    restoreAll();
     map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
     map.on(L.Draw.Event.EDITED, saveAll);
     map.on(L.Draw.Event.DELETED, saveAll);
 
-    // Toolbar actions
-    document.getElementById('btnExport').onclick = () => {
-      const blob = new Blob([JSON.stringify(drawnItems.toGeoJSON(), null, 2)], {type:'application/geo+json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'drawings.geojson';
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    };
-    document.getElementById('btnClear').onclick = () => { drawnItems.clearLayers(); saveAll(); };
-    document.getElementById('fileImport').onchange = ev => {
-      const f = ev.target.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const geo = JSON.parse(reader.result);
-          L.geoJSON(geo, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
-          saveAll();
-        } catch { alert('Invalid GeoJSON'); }
-      };
-      reader.readAsText(f);
-      ev.target.value = '';
-    };
-    document.getElementById('btnFull').onclick = () => {
-      const el = map.getContainer();
-      if (!document.fullscreenElement) { el.requestFullscreen?.(); }
-      else { document.exitFullscreen?.(); }
-    };
-
-    // Public Hunting Lands (live from ODNR)
+    // ----- Public Hunting Lands (ODNR) + Ohio Counties (ODOT) -----
     const publicLandsLayer = L.geoJSON(null, { style:{ color:'#8b5cf6', weight:2, fillOpacity:0.2 } });
-    const ODNR_URL = 'https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson';
-    fetch(ODNR_URL)
-      .then(r => r.json())
-      .then(j => publicLandsLayer.addData(j))
+    fetch('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson')
+      .then(r => r.json()).then(j => publicLandsLayer.addData(j))
       .catch(err => console.warn('ODNR layer load failed:', err));
 
-    // Ohio Counties (live from ODOT)
     const countiesLayer = L.geoJSON(null, { style:{ color:'#555', weight:1, fill:false } });
-    const ODOT_COUNTIES_URL =
-      'https://gis.dot.state.oh.us/arcgis/rest/services/Basemap/ODOT_Basemap/MapServer/165/query?where=1=1&outFields=County_Name&f=geojson';
-    fetch(ODOT_COUNTIES_URL)
-      .then(r => r.json())
-      .then(j => countiesLayer.addData(j))
+    fetch('https://gis.dot.state.oh.us/arcgis/rest/services/Basemap/ODOT_Basemap/MapServer/165/query?where=1=1&outFields=County_Name&f=geojson')
+      .then(r => r.json()).then(j => countiesLayer.addData(j))
       .catch(err => console.warn('Counties load failed:', err));
 
-    // Layers control bottom-left
+    // ----- Layers control -----
+    const baseMaps = { 'OpenStreetMap': osm, 'Toner Lite': toner, 'Terrain': terrain };
     const overlays = {
-      "Public Hunting Lands": publicLandsLayer,
-      "Ohio Counties": countiesLayer,
-      "My Drawings": drawnItems
+      'Public Hunting Lands': publicLandsLayer,
+      'Ohio Counties': countiesLayer,
+      'My Drawings': drawnItems,
+      'My Markers': markersLayer
     };
-    L.control.layers(null, overlays, { position: 'bottomleft' }).addTo(map);
+    L.control.layers(baseMaps, overlays, { position: 'bottomleft' }).addTo(map);
 
-    // Legal Light panel
+    // ----- Legal Light -----
     function updateSun(){
       const c = map.getCenter(), now = new Date(), t = SunCalc.getTimes(now, c.lat, c.lng);
       const fmt = d => d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
@@ -175,6 +323,147 @@
       document.getElementById('dayLength').textContent = "Day length: " + Math.floor(mins/60) + "h " + (mins%60|0) + "m";
     }
     updateSun(); map.on('moveend', updateSun);
+
+    // ----- Toolbar actions (export/import/fullscreen) -----
+    document.getElementById('btnExport').onclick = () => {
+      const data = {
+        drawings: drawnItems.toGeoJSON(),
+        markers: serializeMarkers()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/geo+json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'buckeyehunterhub-export.json';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    };
+    document.getElementById('btnClear').onclick = () => {
+      drawnItems.clearLayers(); markersLayer.clearLayers(); renderMarkerList(); saveAll();
+    };
+    document.getElementById('fileImport').onchange = ev => {
+      const f = ev.target.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const obj = JSON.parse(reader.result);
+          if (obj.type === 'FeatureCollection' || obj.type === 'Feature') {
+            L.geoJSON(obj, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
+          } else {
+            if (obj.drawings) L.geoJSON(obj.drawings, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
+            if (obj.markers) deserializeMarkers(obj.markers);
+          }
+          saveAll();
+        } catch { alert('Invalid JSON/GeoJSON'); }
+      };
+      reader.readAsText(f); ev.target.value = '';
+    };
+    document.getElementById('btnFull').onclick = () => {
+      const el = map.getContainer();
+      if (!document.fullscreenElement) { el.requestFullscreen?.(); } else { document.exitFullscreen?.(); }
+    };
+
+    // ----- Locate me -----
+    document.getElementById('btnLocate').onclick = () => {
+      if (!navigator.geolocation) return alert('Geolocation not supported');
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const { latitude, longitude } = pos.coords;
+          map.setView([latitude, longitude], 15);
+          L.circleMarker([latitude, longitude], { radius:8, color:'#2563eb', fillColor:'#3b82f6', fillOpacity:.6 })
+            .addTo(map).bindPopup('You are here').openPopup();
+        },
+        err => alert('Could not get location: ' + err.message),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    };
+
+    // ----- Measure tool (click two points) -----
+    const btnMeasure = document.getElementById('btnMeasure');
+    let measuring = false, measurePts = [], measureLine = null, measureLabel = null;
+    function resetMeasure() {
+      measurePts = [];
+      if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
+      if (measureLabel) { map.removeLayer(measureLabel); measureLabel = null; }
+    }
+    btnMeasure.onclick = () => {
+      measuring = !measuring;
+      btnMeasure.textContent = measuring ? 'Measuring… (tap 2 points)' : 'Measure';
+      if (!measuring) resetMeasure();
+    };
+    map.on('click', (e) => {
+      if (!measuring) return;
+      measurePts.push(e.latlng);
+      if (measurePts.length === 2) {
+        const dist = map.distance(measurePts[0], measurePts[1]); // meters
+        const yards = dist * 1.09361;
+        if (measureLine) map.removeLayer(measureLine);
+        measureLine = L.polyline(measurePts, { color:'#2563eb', weight:4, dashArray:'6,6' }).addTo(map);
+        const mid = L.latLng(
+          (measurePts[0].lat + measurePts[1].lat)/2,
+          (measurePts[0].lng + measurePts[1].lng)/2
+        );
+        if (measureLabel) map.removeLayer(measureLabel);
+        measureLabel = L.marker(mid, { icon: L.divIcon({ className:'', html:
+          `<div style="background:#111;color:#fff;padding:4px 8px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.25);font:13px system-ui">
+             ${yards.toFixed(0)} yd (${dist.toFixed(0)} m)
+           </div>` })}).addTo(map);
+        // Finish measuring
+        measuring = false; btnMeasure.textContent = 'Measure';
+        measurePts = [];
+      }
+    });
+
+    // ----- Marker palette placement -----
+    let activeType = null;
+    document.querySelectorAll('.chip').forEach(b => {
+      b.onclick = () => {
+        activeType = b.getAttribute('data-type');
+        // visual feedback
+        document.querySelectorAll('.chip').forEach(x => x.style.background = '#fff');
+        b.style.background = '#eef2ff';
+      };
+    });
+    map.on('click', (e) => {
+      if (!activeType) return;
+      // place marker of that type
+      const t = activeType, cfg = markerTypes[t];
+      const m = L.marker(e.latlng, { icon: makeDivIcon(cfg.emoji), type: t, note: '' })
+        .addTo(markersLayer).bindPopup(`<b>${cfg.label}</b>`);
+      renderMarkerList();
+      // keep type active for rapid placement
+    });
+
+    // ----- Marker list UI -----
+    const markerItems = document.getElementById('markerItems');
+    const btnClearMarkers = document.getElementById('btnClearMarkers');
+    function renderMarkerList() {
+      markerItems.innerHTML = '';
+      let idx = 0;
+      markersLayer.eachLayer(m => {
+        const t = m.options.type || 'marker';
+        const mt = markerTypes[t] || { label:'Marker', emoji:'📍' };
+        const { lat, lng } = m.getLatLng();
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `
+          <div class="left">
+            <span class="emoji">${mt.emoji}</span>
+            <div>
+              <div>${mt.label}</div>
+              <div class="muted">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+            </div>
+          </div>
+          <button data-i="${idx}">Go</button>
+        `;
+        row.querySelector('button').onclick = () => { map.setView([lat, lng], 17); m.openPopup(); };
+        markerItems.appendChild(row);
+        idx++;
+      });
+    }
+    btnClearMarkers.onclick = () => { markersLayer.clearLayers(); renderMarkerList(); };
+
+    // Initial legacy restore if any old single-area drawings exist
+    restoreLegacy();
+    // Initial list render
+    renderMarkerList();
   </script>
 </body>
 </html>
