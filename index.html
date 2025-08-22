@@ -94,7 +94,8 @@ const overlays = {
   "Public Hunting Lands": publicLandsLayer, 
   "My Drawings": drawnItems 
 };
-L.control.layers(null, overlays).addTo(map);
+L.control.layers(null, overlays, { position: 'bottomleft' }).addTo(map);
+
 
 
     // SunCalc
