@@ -108,5 +108,175 @@
     if (MAPTILER_KEY) {
       baseLayers["Topo (MapTiler)"] = L.tileLayer(
         `https://api.maptiler.com/maps/topo-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
-        { at
+        { attribution: '&copy; OpenStreetMap, &copy; MapTiler', maxZoom: 20 }
+      );
+      // Satellite
+      baseLayers["Satellite (MapTiler)"] = L.tileLayer(
+        `https://api.maptiler.com/tiles/satellite/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`,
+        { attribution: '&copy; MapTiler', maxZoom: 20 }
+      );
+    }
 
+    // Stadia Outdoors (Stamen Outdoors hosted by Stadia Maps)
+    if (STADIA_KEY) {
+      baseLayers["Outdoors (Stadia)"] = L.tileLayer(
+        `https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.png?api_key=${STADIA_KEY}`,
+        { attribution: '&copy; Stadia Maps & contributors', maxZoom: 20 }
+      );
+    }
+
+    // Default view: Ohio
+    map.setView([40.4173, -82.9071], 6);
+
+    // === Draw + Persistence ===
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+      position: 'topleft',
+      draw: {
+        marker: true,
+        polyline: { shapeOptions: { color:'#2563eb', weight:4 } },
+        polygon: { allowIntersection:false, showArea:true, shapeOptions:{ color:'#16a34a' } },
+        rectangle: { shapeOptions: { color:'#d97706' } },
+        circle: false
+      },
+      edit: { featureGroup: drawnItems, remove: true }
+    });
+    map.addControl(drawControl);
+
+    const STORAGE_KEY = 'bhh_leaflet_drawings_v1';
+    function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
+    function restoreAll(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const geo = JSON.parse(raw);
+        L.geoJSON(geo, { onEachFeature: (_, layer) => drawnItems.addLayer(layer) });
+      } catch(e){ console.warn('Restore failed:', e); }
+    }
+
+    map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveAll(); });
+    map.on(L.Draw.Event.EDITED, saveAll);
+    map.on(L.Draw.Event.DELETED, saveAll);
+
+    // === Public Hunting Lands Overlay ===
+    // 1) Upload your real GeoJSON to this repo, get its RAW URL, then set DATA_URL below.
+    const DATA_URL = "SAMPLE"; // replace with e.g. https://raw.githubusercontent.com/joshbhh/buckeyehunterhub-map/main/ohio_public_hunting.geojson
+    const SAMPLE_GEOJSON = {
+      "type":"FeatureCollection",
+      "features":[{"type":"Feature","properties":{"name":"Sample Public Hunting Area"},
+      "geometry":{"type":"Polygon","coordinates":[[[-83.2,40.7],[-83.0,40.7],[-83.0,40.55],[-83.2,40.55],[-83.2,40.7]]]}}]
+    };
+
+    const publicLandsLayer = L.geoJSON(null, {
+      style: { color:'#8b5cf6', weight:2, fillOpacity:0.18 },
+      onEachFeature: (f, layer) => {
+        const n = (f.properties && (f.properties.name || f.properties.AREA_NAME || f.properties.Title)) || 'Public Hunting Land';
+        layer.bindPopup(n);
+      }
+    });
+
+    function loadPublicLands(){
+      if (DATA_URL === "SAMPLE") { publicLandsLayer.addData(SAMPLE_GEOJSON); return; }
+      fetch(DATA_URL)
+        .then(r => r.json())
+        .then(geo => publicLandsLayer.addData(geo))
+        .catch(err => { console.warn('Failed to load public lands; using sample.', err); publicLandsLayer.addData(SAMPLE_GEOJSON); });
+    }
+    loadPublicLands();
+
+    // === Layer control ===
+    const overlays = { "Ohio Public Hunting Lands": publicLandsLayer, "My Drawings": drawnItems };
+    L.control.layers(baseLayers, overlays, { collapsed:true }).addTo(map);
+
+    // === Import / Export / Clear / Fullscreen / Geolocate / Print ===
+    document.getElementById('btnExport').addEventListener('click', () => {
+      const data = drawnItems.toGeoJSON();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/geo+json' });
+      const url  = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), { href:url, download:'buckeyehunterhub-drawings.geojson' });
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('btnClear').addEventListener('click', () => { drawnItems.clearLayers(); saveAll(); });
+
+    document.getElementById('fileImport').addEventListener('change', ev => {
+      const file = ev.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const geo = JSON.parse(reader.result);
+          L.geoJSON(geo, { onEachFeature:(_,layer)=>drawnItems.addLayer(layer) });
+          saveAll();
+        } catch(e){ alert('Invalid GeoJSON file.'); }
+      };
+      reader.readAsText(file);
+      ev.target.value = '';
+    });
+
+    const mapEl = document.getElementById('map');
+    document.getElementById('btnFull').addEventListener('click', () => {
+      if (!document.fullscreenElement){ mapEl.requestFullscreen?.() || mapEl.webkitRequestFullscreen?.(); }
+      else { document.exitFullscreen?.() || document.webkitExitFullscreen?.(); }
+    });
+
+    document.getElementById('btnLocate').addEventListener('click', () => {
+      if (!navigator.geolocation) return alert('Geolocation not supported');
+      navigator.geolocation.getCurrentPosition(
+        pos => map.setView([pos.coords.latitude, pos.coords.longitude], 12),
+        () => alert('Could not get GPS location')
+      );
+    });
+
+    document.getElementById('btnPrint').addEventListener('click', () => window.print());
+
+    // === Shareable link (view + drawings in URL) ===
+    function encodeShare(){
+      const v = map.getCenter(); const z = map.getZoom();
+      const geo = drawnItems.toGeoJSON();
+      const packed = LZString.compressToEncodedURIComponent(JSON.stringify(geo));
+      return `${location.origin}${location.pathname}?z=${z}&lat=${v.lat.toFixed(6)}&lng=${v.lng.toFixed(6)}#s=${packed}`;
+    }
+    function decodeShare(){
+      const params = new URLSearchParams(location.search);
+      const z = Number(params.get('z')), lat = Number(params.get('lat')), lng = Number(params.get('lng'));
+      if (!isNaN(lat) && !isNaN(lng) && !isNaN(z)) map.setView([lat,lng], z);
+      const hash = new URL(location.href).hash;
+      if (hash.startsWith('#s=')){
+        try {
+          const json = LZString.decompressFromEncodedURIComponent(hash.slice(3));
+          const geo = JSON.parse(json);
+          L.geoJSON(geo, { onEachFeature:(_,layer)=>drawnItems.addLayer(layer) });
+        } catch(e){ console.warn('Share decode failed', e); }
+      }
+    }
+    document.getElementById('btnShare').addEventListener('click', async () => {
+      const link = encodeShare();
+      try { await navigator.clipboard.writeText(link); alert('Share link copied to clipboard!'); }
+      catch { prompt('Copy this link:', link); }
+    });
+
+    // === Legal light panel (SunCalc) ===
+    function fmtTime(d){ return d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—'; }
+    function dayLen(sr, ss){ if(!sr||!ss) return '—'; const ms = ss - sr; const h = Math.floor(ms/3600000), m = Math.round((ms%3600000)/60000); return `${h}h ${m}m`; }
+    function updateSun(){
+      const c = map.getCenter(); const now = new Date();
+      const t = SunCalc.getTimes(now, c.lat, c.lng);
+      document.getElementById('where').textContent = `Lat ${c.lat.toFixed(4)}, Lng ${c.lng.toFixed(4)}`;
+      document.getElementById('sunrise').textContent = fmtTime(t.sunrise);
+      document.getElementById('sunset').textContent  = fmtTime(t.sunset);
+      document.getElementById('civilDawn').textContent = fmtTime(t.dawn);
+      document.getElementById('civilDusk').textContent = fmtTime(t.dusk);
+      document.getElementById('dayLength').textContent = dayLen(t.sunrise, t.sunset);
+      document.getElementById('dateLine').textContent = now.toLocaleDateString();
+    }
+    map.on('moveend', updateSun);
+
+    // === Startup sequence ===
+    decodeShare();   // load from URL if present
+    restoreAll();    // or restore local drawings
+    updateSun();
+  </script>
+</body>
+</html>
