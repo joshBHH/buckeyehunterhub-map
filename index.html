@@ -53,22 +53,27 @@
     }
     .panel h3 { margin: 0 0 6px; font-size: 15px; }
 
-    /* Locate button (bottom-right) */
-    .locate-btn {
-      position: fixed;
-      right: 12px; bottom: 90px; z-index: 960;
-      background:#fff; border:1px solid #ddd; border-radius: 999px;
-      padding: 8px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
-      font: 14px system-ui; cursor: pointer;
-      display: inline-flex; align-items: center; gap: 8px;
-    }
-    .locate-btn:active { transform: scale(0.98); }
+/* Locate button (bottom-right, raised above the toolbar) */
+.locate-btn {
+  position: fixed;
+  right: 12px;
+  bottom: 180px;   /* was ~90px — raise it so it clears the toolbar */
+  z-index: 960;
+  background:#fff; border:1px solid #ddd; border-radius: 999px;
+  padding: 8px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+  font: 14px system-ui; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.locate-btn:active { transform: scale(0.98); }
 
-    @media (max-width: 640px) {
-      .panel { top: 56px; right: 8px; }
-      .toolbar { left: 8px; right: 8px; bottom: 8px; justify-content: center; }
-      .locate-btn { right: 8px; bottom: 88px; }
-    }
+/* Mobile tweak so it still clears the toolbar on phones */
+@media (max-width: 640px) {
+  .locate-btn {
+    right: 8px;
+    bottom: 150px; /* was 88–136px — keep it higher on small screens */
+  }
+}
+
   </style>
 </head>
 <body>
