@@ -93,6 +93,10 @@
       attribution: '&copy; <a href="https://www.maptiler.com/">MapTiler</a>'
     });
 
+    const topo = L.tileLayer('https://api.maptiler.com/maps/topo/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3', {
+      attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+    });
+
     // Default base layer
     basic.addTo(map);
 
@@ -160,7 +164,8 @@
     // --- Layer control (basemaps + overlays) ---
     const baseMaps = {
       "Basic": basic,
-      "Satellite": satellite
+      "Satellite": satellite,
+      "Topographic": topo
     };
     const overlays = {
       "Public Hunting Lands": publicLandsLayer,
