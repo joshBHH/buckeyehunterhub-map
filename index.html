@@ -81,13 +81,22 @@
   </div>
 
   <script>
+    // --- Map ---
     const map = L.map('map').setView([40.4173, -82.9071], 6);
-L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3', 'https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=VLOZCnjQYBtgpZ3BXBK3', 'https://api.maptiler.com/tiles/contours-v2/{z}/{x}/{y}.pbf?key=VLOZCnjQYBtgpZ3BXBK3', {
-  attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-}).addTo(map);
 
+    // --- MapTiler basemaps (your key included) ---
+    const basic = L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3', {
+      attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+    });
 
-    // Draw layer
+    const satellite = L.tileLayer('https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=VLOZCnjQYBtgpZ3BXBK3', {
+      attribution: '&copy; <a href="https://www.maptiler.com/">MapTiler</a>'
+    });
+
+    // Default base layer
+    basic.addTo(map);
+
+    // --- Draw layer ---
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
     map.addControl(new L.Control.Draw({
@@ -96,7 +105,7 @@ L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBt
       draw: { circle: false }
     }));
 
-    // Save to localStorage
+    // --- Save to localStorage ---
     const STORAGE_KEY = "bhh_drawings";
     function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(drawnItems.toGeoJSON())); }
     function restoreAll(){
@@ -108,7 +117,7 @@ L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBt
     map.on(L.Draw.Event.EDITED, saveAll);
     map.on(L.Draw.Event.DELETED, saveAll);
 
-    // Toolbar
+    // --- Toolbar actions ---
     document.getElementById('btnExport').onclick = () => {
       const blob = new Blob([JSON.stringify(drawnItems.toGeoJSON(), null, 2)], {type:'application/geo+json'});
       const url = URL.createObjectURL(blob);
@@ -135,29 +144,32 @@ L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBt
       else { document.exitFullscreen?.(); }
     };
 
-    // Public Hunting Lands (ODNR)
+    // --- Data overlays ---
     const publicLandsLayer = L.geoJSON(null, { style:{ color:'#8b5cf6', weight:2, fillOpacity:0.2 } });
     fetch('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson')
       .then(r => r.json())
       .then(j => publicLandsLayer.addData(j))
       .catch(err => console.warn('ODNR layer load failed:', err));
 
-    // Ohio Counties (ODOT)
     const countiesLayer = L.geoJSON(null, { style:{ color:'#555', weight:1, fill:false } });
     fetch('https://gis.dot.state.oh.us/arcgis/rest/services/Basemap/ODOT_Basemap/MapServer/165/query?where=1=1&outFields=County_Name&f=geojson')
       .then(r => r.json())
       .then(j => countiesLayer.addData(j))
       .catch(err => console.warn('Counties load failed:', err));
 
-    // Layers control
+    // --- Layer control (basemaps + overlays) ---
+    const baseMaps = {
+      "Basic": basic,
+      "Satellite": satellite
+    };
     const overlays = {
       "Public Hunting Lands": publicLandsLayer,
       "Ohio Counties": countiesLayer,
       "My Drawings": drawnItems
     };
-    L.control.layers(null, overlays, { position: 'bottomleft' }).addTo(map);
+    L.control.layers(baseMaps, overlays, { position: 'bottomleft' }).addTo(map);
 
-    // Legal Light
+    // --- Legal Light ---
     function updateSun(){
       const c = map.getCenter(), now = new Date(), t = SunCalc.getTimes(now, c.lat, c.lng);
       const fmt = d => d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
