@@ -53,23 +53,21 @@
     }
     .panel h3 { margin: 0 0 6px; font-size: 15px; }
 
-    /* Flyways legend (bottom-right above toolbar) */
-    .legend-flyways {
+    /* Locate button (bottom-right) */
+    .locate-btn {
       position: fixed;
-      right: 12px; bottom: 90px; z-index: 950;
-      background:#fff; border:1px solid #ddd; border-radius:10px; padding:8px 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,.2);
-      font: 13px system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      display:none;
+      right: 12px; bottom: 90px; z-index: 960;
+      background:#fff; border:1px solid #ddd; border-radius: 999px;
+      padding: 8px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
+      font: 14px system-ui; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px;
     }
-    .legend-flyways h4 { margin:0 0 6px; font-size:13px; }
-    .legend-row { display:flex; align-items:center; gap:8px; margin:3px 0; }
-    .legend-swatch { width:14px; height:14px; border-radius:3px; border:1px solid #bbb; }
+    .locate-btn:active { transform: scale(0.98); }
 
     @media (max-width: 640px) {
       .panel { top: 56px; right: 8px; }
       .toolbar { left: 8px; right: 8px; bottom: 8px; justify-content: center; }
-      .legend-flyways { right: 8px; bottom: 88px; }
+      .locate-btn { right: 8px; bottom: 88px; }
     }
   </style>
 </head>
@@ -95,34 +93,17 @@
     <div id="dayLength"></div>
   </div>
 
-  <!-- Waterfowl Flyways legend -->
-  <div class="legend-flyways" id="flyLegend">
-    <h4>Waterfowl Flyways</h4>
-    <div class="legend-row"><span class="legend-swatch" style="background:#1f77b4"></span> Pacific</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#2ca02c"></span> Central</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#ff7f0e"></span> Mississippi</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#9467bd"></span> Atlantic</div>
-  </div>
+  <!-- Locate button -->
+  <button class="locate-btn" id="btnLocate">📍 Locate Me</button>
 
   <script>
     // --- Map ---
     const map = L.map('map').setView([40.4173, -82.9071], 6);
 
-    // --- MapTiler basemaps (your key included) ---
-    const basic = L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3', {
-      attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-    });
-
-    const satellite = L.tileLayer('https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=VLOZCnjQYBtgpZ3BXBK3', {
-      attribution: '&copy; <a href="https://www.maptiler.com/">MapTiler</a>'
-    });
-
-    const topo = L.tileLayer('https://api.maptiler.com/maps/topo/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3', {
-      attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">&copy; MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
-    });
-
-    // Default base layer
-    basic.addTo(map);
+    // --- MapTiler basemaps ---
+    const basic = L.tileLayer('https://api.maptiler.com/maps/basic/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3').addTo(map);
+    const satellite = L.tileLayer('https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=VLOZCnjQYBtgpZ3BXBK3');
+    const topo = L.tileLayer('https://api.maptiler.com/maps/topo/{z}/{x}/{y}.png?key=VLOZCnjQYBtgpZ3BXBK3');
 
     // --- Draw layer ---
     const drawnItems = new L.FeatureGroup();
@@ -172,67 +153,46 @@
       else { document.exitFullscreen?.(); }
     };
 
-    // --- Data overlays (existing) ---
+    // --- Overlays ---
     const publicLandsLayer = L.geoJSON(null, { style:{ color:'#8b5cf6', weight:2, fillOpacity:0.2 } });
     fetch('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson')
       .then(r => r.json())
-      .then(j => publicLandsLayer.addData(j))
-      .catch(err => console.warn('ODNR layer load failed:', err));
+      .then(j => publicLandsLayer.addData(j));
 
     const countiesLayer = L.geoJSON(null, { style:{ color:'#555', weight:1, fill:false } });
     fetch('https://gis.dot.state.oh.us/arcgis/rest/services/Basemap/ODOT_Basemap/MapServer/165/query?where=1=1&outFields=County_Name&f=geojson')
       .then(r => r.json())
-      .then(j => countiesLayer.addData(j))
-      .catch(err => console.warn('Counties load failed:', err));
+      .then(j => countiesLayer.addData(j));
 
-    // --- Waterfowl Flyways (USFWS) + legend toggle ---
-    function flywayColor(name) {
-      switch ((name || '').toLowerCase()) {
-        case 'pacific': return '#1f77b4';
-        case 'central': return '#2ca02c';
-        case 'mississippi': return '#ff7f0e';
-        case 'atlantic': return '#9467bd';
-        default: return '#555';
-      }
-    }
+    // --- Layer control ---
+    L.control.layers(
+      { "Basic": basic, "Satellite": satellite, "Topographic": topo },
+      { "Public Hunting Lands": publicLandsLayer, "Ohio Counties": countiesLayer, "My Drawings": drawnItems },
+      { position: 'bottomleft' }
+    ).addTo(map);
 
-    const flywaysLayer = L.geoJSON(null, {
-      style: f => ({
-        color: flywayColor(f.properties.FLYWAY || f.properties.Flyway || f.properties.NAME),
-        weight: 2, fillOpacity: 0.15
-      }),
-      onEachFeature: (f, layer) => {
-        const n = f.properties.FLYWAY || f.properties.Flyway || f.properties.NAME || 'Flyway';
-        layer.bindPopup(`<b>${n} Flyway</b>`);
-      }
-    });
+    // --- Locate Me ---
+    const btnLocate = document.getElementById('btnLocate');
+    let youAreHere = null, youAreHereAcc = null;
 
-    // Load from USFWS FeatureServer (GeoJSON output)
-    fetch('https://services.arcgis.com/QVENGdaPbd4LUkLV/arcgis/rest/services/FWS_HQ_MB_Waterfowl_Flyway_Boundaries/FeatureServer/0/query?where=1=1&outFields=FLYWAY,NAME&f=geojson')
-      .then(r => r.json())
-      .then(j => { flywaysLayer.addData(j); })
-      .catch(err => console.warn('Flyways load failed:', err));
-
-    // Legend element
-    const flyLegend = document.getElementById('flyLegend');
-
-    // --- Layer control (basemaps + overlays) ---
-    const baseMaps = {
-      "Basic": basic,
-      "Satellite": satellite,
-      "Topographic": topo
+    btnLocate.onclick = () => {
+      if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+      btnLocate.disabled = true; btnLocate.textContent = '📍 Locating…';
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          btnLocate.disabled = false; btnLocate.textContent = '📍 Locate Me';
+          const { latitude, longitude, accuracy } = pos.coords;
+          const latlng = [latitude, longitude];
+          if (youAreHere) map.removeLayer(youAreHere);
+          if (youAreHereAcc) map.removeLayer(youAreHereAcc);
+          youAreHereAcc = L.circle(latlng, { radius: Math.min(accuracy||50,200), color:'#2563eb', fillColor:'#3b82f6', fillOpacity:0.15, weight:2 }).addTo(map);
+          youAreHere = L.circleMarker(latlng, { radius: 8, color:'#2563eb', weight:3, fillColor:'#3b82f6', fillOpacity:0.9 }).addTo(map).bindPopup('You are here').openPopup();
+          map.setView(latlng, 15);
+        },
+        err => { btnLocate.disabled = false; btnLocate.textContent = '📍 Locate Me'; alert('Location error: ' + err.message); },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
     };
-    const overlays = {
-      "Public Hunting Lands": publicLandsLayer,
-      "Ohio Counties": countiesLayer,
-      "Waterfowl Flyways (USFWS)": flywaysLayer,
-      "My Drawings": drawnItems
-    };
-    const lc = L.control.layers(baseMaps, overlays, { position: 'bottomleft' }).addTo(map);
-
-    // Show/hide legend based on flyways visibility
-    map.on('overlayadd', e => { if (e.name === 'Waterfowl Flyways (USFWS)') flyLegend.style.display = 'block'; });
-    map.on('overlayremove', e => { if (e.name === 'Waterfowl Flyways (USFWS)') flyLegend.style.display = 'none'; });
 
     // --- Legal Light ---
     function updateSun(){
