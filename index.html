@@ -13,9 +13,6 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 
-  <!-- Turf.js for geodesic length/area + bearings -->
-  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-
   <!-- SunCalc -->
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
 
@@ -34,7 +31,7 @@
     /* Layers control bottom-left */
     .leaflet-bottom.leaflet-left .leaflet-control { margin: 0 0 12px 12px; }
 
-    /* Bottom toolbar (export/import + measure) */
+    /* Bottom toolbar (export/import) */
     .toolbar {
       position: fixed;
       bottom: calc(12px + var(--safe-bottom));
@@ -51,7 +48,7 @@
     }
     .toolbar input[type="file"] { display: none; }
 
-    /* Legal Light panel */
+    /* Legal Light panel (top-right by default) */
     .panel {
       position: fixed;
       top: 12px; right: 12px; z-index: 900;
@@ -64,14 +61,16 @@
       font-weight: 600; margin-bottom: 6px; display:flex; align-items:center; gap:8px;
       cursor: move; user-select:none;
     }
-    .grip { width: 24px; height: 4px; border-radius: 4px; background:#ccc; }
+    .grip {
+      width: 24px; height: 4px; border-radius: 4px; background:#ccc;
+    }
 
-    /* Marker palette */
+    /* Marker palette (above bottom toolbar on desktop) */
     .palette {
       position: fixed;
       right: 12px;
-      bottom: calc(100px + var(--safe-bottom));
-      z-index: 1100;
+      bottom: calc(100px + var(--safe-bottom));   /* sits above the bottom toolbar */
+      z-index: 1100;              /* above toolbar, below locate button */
       display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
       background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 6px 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,.2);
@@ -89,12 +88,12 @@
       margin-left:6px;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:6px 10px;cursor:pointer;
     }
 
-    /* Locate button */
+    /* Locate button (above palette) */
     .locate-btn {
       position: fixed;
       right: 12px;
-      bottom: calc(160px + var(--safe-bottom));
-      z-index: 1200;
+      bottom: calc(160px + var(--safe-bottom));  /* above the palette */
+      z-index: 1200;             /* above palette and toolbar */
       background:#fff; border:1px solid #ddd; border-radius: 999px;
       padding: 8px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
       font: 14px system-ui; cursor: pointer;
@@ -103,27 +102,13 @@
     }
     .locate-btn:active { transform: scale(0.98); }
 
-    /* Marker List panel (draggable) */
-    .listpanel {
-      position: fixed;
-      left: 12px; top: 120px; z-index: 950;
-      background:#fff; border:1px solid #ddd; border-radius:10px; padding:8px 10px;
-      box-shadow: 0 2px 10px rgba(0,0,0,.2);
-      width: 260px; max-height: 50vh; overflow:auto;
-      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
-    }
-    .listpanel .drag-handle { font-weight:600; margin-bottom:6px; cursor: move; user-select:none; }
-    .ml-item { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #f1f1f1; }
-    .ml-item:last-child { border-bottom:none; }
-    .ml-item .meta { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .ml-item button { padding:4px 8px; border:1px solid #ddd; border-radius:6px; background:#f9f9f9; cursor:pointer; }
-
-    /* Draggable helpers */
+    /* ===== Draggable helpers ===== */
     .draggable { position: fixed; }
     .drag-handle { cursor: move; user-select: none; -webkit-user-select: none; }
 
-    /* Mobile tweaks */
+    /* ===== Mobile tweaks ===== */
     @media (max-width: 640px) {
+      /* Slightly shrink Leaflet controls */
       .leaflet-control { transform: scale(0.92); transform-origin: top left; }
       .leaflet-control-zoom { margin-top: 6px; }
       .leaflet-control-container .leaflet-draw { margin-top: 46px; }
@@ -132,20 +117,40 @@
       .panel .drag-handle { margin-bottom: 4px; }
       .panel h3 { font-size: 13px; }
 
-      .toolbar { left: 8px; right: 8px; bottom: calc(8px + var(--safe-bottom)); justify-content: center; flex-wrap: wrap; }
-      .palette { right: 8px; left: 8px; bottom: calc(112px + var(--safe-bottom)); display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+      .toolbar {
+        left: 8px; right: 8px; bottom: calc(8px + var(--safe-bottom));
+        justify-content: center; flex-wrap: wrap;
+      }
+
+      /* Palette becomes single-line horizontal scroller */
+      .palette {
+        right: 8px; left: 8px;
+        bottom: calc(112px + var(--safe-bottom));
+        display: block;
+        overflow-x: auto; white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+      }
       .chip { padding: 4px 8px; font-size: 13px; margin-right: 6px; }
       .emoji { font-size: 16px; }
 
-      .locate-btn { right: 8px; bottom: auto; top: 96px; }
-      .listpanel { left: 8px; top: 160px; width: calc(100vw - 16px); max-height: 36vh; }
-      .palette.hidden { display: none; }
-      .palette-toggle {
-        position: fixed; left: 8px; right: 8px; bottom: calc(150px + var(--safe-bottom));
-        z-index: 1150; display: inline-flex; justify-content: center; align-items:center;
-        padding: 8px 12px; border:1px solid #ddd; border-radius: 999px; background:#fff;
-        box-shadow: 0 2px 10px rgba(0,0,0,.2); font: 14px system-ui; cursor: pointer;
+      /* Locate button moves near top by default (still draggable) */
+      .locate-btn {
+        right: 8px; bottom: auto;
+        top: 96px;
       }
+
+      /* Mobile palette toggle button */
+      .palette-toggle {
+        position: fixed;
+        left: 8px; right: 8px;
+        bottom: calc(150px + var(--safe-bottom));
+        z-index: 1150;
+        display: inline-flex; justify-content: center; align-items:center;
+        padding: 8px 12px; border:1px solid #ddd; border-radius: 999px; background:#fff;
+        box-shadow: 0 2px 10px rgba(0,0,0,.2);
+        font: 14px system-ui; cursor: pointer;
+      }
+      .palette.hidden { display: none; }
     }
   </style>
 </head>
@@ -173,10 +178,6 @@
     <button id="btnClear">Clear</button>
     <label for="fileImport">Import</label>
     <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json"/>
-    <!-- Measure tools -->
-    <button id="btnMeasureDist" title="Draw distance line">Measure Dist</button>
-    <button id="btnMeasureArea" title="Draw area polygon">Measure Area</button>
-    <button id="btnFinishDraw" title="Finish drawing">Finish</button>
     <button id="btnFull">Fullscreen</button>
   </div>
 
@@ -188,26 +189,10 @@
     <div id="civilDawn"></div>
     <div id="civilDusk"></div>
     <div id="dayLength"></div>
-    <div id="moonPhase"></div>
-    <div id="moonTimes"></div>
-    <hr>
-    <div style="font-weight:600;margin-bottom:6px;">Wind (for Stand cones)</div>
-    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-      <label>Dir° <input type="number" id="windDir" min="0" max="359" step="1" value="180" style="width:64px;"></label>
-      <label>Spread° <input type="number" id="windSpread" min="10" max="120" step="5" value="40" style="width:64px;"></label>
-      <label>Len (yd) <input type="number" id="windLen" min="50" max="800" step="25" value="200" style="width:76px;"></label>
-      <button id="btnUpdateWind">Apply</button>
-    </div>
   </div>
 
   <!-- Locate button (DRAGGABLE; whole btn is handle) -->
   <button class="locate-btn draggable drag-handle" id="btnLocate" type="button" aria-label="Locate Me">📍 Locate Me</button>
-
-  <!-- Marker List (DRAGGABLE) -->
-  <div class="listpanel draggable" id="listPanel">
-    <div class="drag-handle">📋 Marker List</div>
-    <div id="listContent">No markers yet.</div>
-  </div>
 
   <script>
     // --- Map ---
@@ -227,12 +212,11 @@
     // --- Draw layer ---
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
-    const drawControl = new L.Control.Draw({
+    map.addControl(new L.Control.Draw({
       position: 'topleft',
       edit: { featureGroup: drawnItems },
       draw: { circle: false }
-    });
-    map.addControl(drawControl);
+    }));
 
     // --- Save to localStorage (drawings) ---
     const STORAGE_DRAW = "bhh_drawings";
@@ -242,26 +226,7 @@
       if (raw) L.geoJSON(JSON.parse(raw), { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
     }
     restoreDraw();
-    map.on(L.Draw.Event.CREATED, e => {
-      // If it's a measure sketch, label it:
-      if (e.layer instanceof L.Polyline && !(e.layer instanceof L.Polygon)) {
-        try {
-          const line = turf.lineString(e.layer.getLatLngs().map(ll => [ll.lng, ll.lat]));
-          const miles = turf.length(line, {units:'miles'});
-          const yards = miles * 1760;
-          e.layer.bindPopup(`${yards.toFixed(0)} yd`).openPopup();
-        } catch {}
-      }
-      if (e.layer instanceof L.Polygon) {
-        try {
-          const poly = turf.polygon([e.layer.getLatLngs()[0].map(ll => [ll.lng, ll.lat])]);
-          const acres = turf.area(poly) * 0.000247105; // m² -> acres
-          e.layer.bindPopup(`${acres.toFixed(2)} acres`).openPopup();
-        } catch {}
-      }
-      drawnItems.addLayer(e.layer);
-      saveDraw();
-    });
+    map.on(L.Draw.Event.CREATED, e => { drawnItems.addLayer(e.layer); saveDraw(); });
     map.on(L.Draw.Event.EDITED, saveDraw);
     map.on(L.Draw.Event.DELETED, saveDraw);
 
@@ -278,8 +243,7 @@
     };
     document.getElementById('btnClear').onclick = () => {
       drawnItems.clearLayers(); saveDraw();
-      markersLayer.clearLayers(); saveMarkers(); rebuildList();
-      clearAllCones();
+      markersLayer.clearLayers(); saveMarkers();
     };
     document.getElementById('fileImport').onchange = ev => {
       const f = ev.target.files[0]; if (!f) return;
@@ -293,7 +257,7 @@
             if (obj.drawings) L.geoJSON(obj.drawings, { onEachFeature:(_,l)=>drawnItems.addLayer(l) });
             if (obj.markers) deserializeMarkers(obj.markers);
           }
-          saveDraw(); saveMarkers(); rebuildList(); updateAllCones();
+          saveDraw(); saveMarkers();
         } catch { alert('Invalid JSON/GeoJSON'); }
       };
       reader.readAsText(f);
@@ -305,15 +269,7 @@
       else { document.exitFullscreen?.(); }
     };
 
-    // Measure buttons (programmatic start/finish)
-    const drawTools = new L.Draw.Polyline(map, drawControl.options.draw.polyline);
-    const drawPoly  = new L.Draw.Polygon(map,  drawControl.options.draw.polygon);
-    let activeDraw = null;
-    document.getElementById('btnMeasureDist').onclick = () => { activeDraw?.disable(); activeDraw = drawTools; drawTools.enable(); };
-    document.getElementById('btnMeasureArea').onclick = () => { activeDraw?.disable(); activeDraw = drawPoly;  drawPoly.enable();  };
-    document.getElementById('btnFinishDraw').onclick  = () => { activeDraw?.disable(); activeDraw = null; };
-
-    // --- Overlays you had ---
+    // --- Overlays ---
     const publicLandsLayer = L.geoJSON(null, { style:{ color:'#8b5cf6', weight:2, fillOpacity:0.2 } });
     fetch('https://gis2.ohiodnr.gov/ArcGIS/rest/services/OIT_Services/DNR_Fed_Lands_Nav_Base/MapServer/2/query?where=1=1&outFields=*&f=geojson')
       .then(r => r.json())
@@ -335,7 +291,7 @@
     const ICON_SZ = IS_MOBILE ? 28 : 32;
     const FONT_SZ = IS_MOBILE ? 16 : 18;
 
-    // CSS-only custom icons
+    // CSS-only custom icons via divIcon (no image files)
     function makeIcon(bg, emoji){
       return L.divIcon({
         className: 'bhh-divicon',
@@ -360,44 +316,55 @@
       scrape: { label:'Scrape', icon: makeIcon('#6d28d9','🦌') }
     };
 
-    // Toggleable palette
+    // --- Toggleable palette ---
     let activeType = null;
     function setActiveType(typeOrNull) {
       activeType = typeOrNull;
-      document.querySelectorAll('.chip').forEach(ch => ch.classList.toggle('active', ch.getAttribute('data-type') === activeType));
+      // visual selection
+      document.querySelectorAll('.chip').forEach(ch => {
+        ch.classList.toggle('active', ch.getAttribute('data-type') === activeType);
+      });
+      // cursor hint
       const mapEl = document.getElementById('map');
-      if (activeType) mapEl.classList.add('placing'); else mapEl.classList.remove('placing');
+      if (activeType) mapEl.classList.add('placing');
+      else mapEl.classList.remove('placing');
     }
+
+    // clicking a chip toggles it on/off (ignore drag-handle chip)
     document.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const t = chip.getAttribute('data-type');
-        if (!t) return; // skip "Move" handle chip
-        if (activeType === t) setActiveType(null); else setActiveType(t);
+        if (!t) return; // skip the "Move" handle chip
+        if (activeType === t) setActiveType(null);
+        else setActiveType(t);
       });
     });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') setActiveType(null); });
 
-    // Marker creation with note
+    // ESC key cancels placement mode
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setActiveType(null);
+    });
+
+    // map click places a marker only if a type is active
     map.on('click', (e) => {
       if (!activeType) return;
       const cfg = markerTypes[activeType];
-      const title = prompt(`Name/Note for ${cfg.label}? (optional)`, '') || '';
-      const m = L.marker(e.latlng, { icon: cfg.icon, type: activeType, meta: { title } })
+      const m = L.marker(e.latlng, { icon: cfg.icon, type: activeType })
         .addTo(markersLayer)
-        .bindPopup(`<b>${cfg.label}</b>${title ? `<div>${escapeHtml(title)}</div>`:''}`);
-      saveMarkers(); rebuildList(); updateConeForMarker(m); // add wind cone if stand
+        .bindPopup(`<b>${cfg.label}</b>`);
+      saveMarkers();
     });
 
-    // Clear markers
+    // clear markers button
     document.getElementById('btnClearMarkers').onclick = () => {
-      markersLayer.clearLayers(); saveMarkers(); rebuildList(); clearAllCones();
+      markersLayer.clearLayers(); saveMarkers();
     };
 
-    // Serialize / Persist markers (with notes)
+    // persistence for markers
     function serializeMarkers(){
       const list=[]; markersLayer.eachLayer(m => {
         const {lat,lng} = m.getLatLng();
-        list.push({ type: m.options.type || 'marker', lat, lng, title: (m.options.meta?.title)||'' });
+        list.push({ type: m.options.type || 'marker', lat, lng });
       });
       return list;
     }
@@ -405,45 +372,13 @@
       markersLayer.clearLayers();
       (list||[]).forEach(m=>{
         const cfg = markerTypes[m.type] || { icon: makeIcon('#111827','📍'), label:'Marker' };
-        const mk = L.marker([m.lat,m.lng], { icon: cfg.icon, type: m.type, meta: { title: m.title||'' } })
-          .addTo(markersLayer)
-          .bindPopup(`<b>${cfg.label||'Marker'}</b>${m.title?`<div>${escapeHtml(m.title)}</div>`:''}`);
-        updateConeForMarker(mk);
+        L.marker([m.lat,m.lng], { icon: cfg.icon, type: m.type }).addTo(markersLayer).bindPopup(`<b>${cfg.label||'Marker'}</b>`);
       });
     }
     function saveMarkers(){ localStorage.setItem(STORAGE_MARK, JSON.stringify(serializeMarkers())); }
     (function restoreMarkers(){
       try { const raw = localStorage.getItem(STORAGE_MARK); if (raw) deserializeMarkers(JSON.parse(raw)); } catch {}
-      rebuildList(); updateAllCones();
     })();
-
-    // --- Marker List panel ---
-    const listContent = document.getElementById('listContent');
-    function rebuildList(){
-      const items=[];
-      markersLayer.eachLayer(m=>{
-        const {lat,lng} = m.getLatLng();
-        const type = m.options.type || 'marker';
-        const title = (m.options.meta?.title)||'';
-        items.push({ m, type, title, lat, lng });
-      });
-      if (!items.length) { listContent.textContent = 'No markers yet.'; return; }
-      items.sort((a,b)=> (a.type+a.title).localeCompare(b.type+b.title) );
-      listContent.innerHTML = '';
-      items.forEach((it, idx)=>{
-        const row = document.createElement('div');
-        row.className='ml-item';
-        const meta = document.createElement('div');
-        meta.className='meta';
-        meta.textContent = `${(markerTypes[it.type]?.label)||'Marker'}${it.title?': '+it.title:''}`;
-        const go = document.createElement('button'); go.textContent='Go';
-        go.onclick = ()=> { map.setView([it.lat, it.lng], 17); it.m.openPopup(); };
-        const del = document.createElement('button'); del.textContent='Del';
-        del.onclick = ()=> { markersLayer.removeLayer(it.m); saveMarkers(); rebuildList(); updateAllCones(); };
-        row.appendChild(meta); row.appendChild(go); row.appendChild(del);
-        listContent.appendChild(row);
-      });
-    }
 
     // --- Layer control ---
     L.control.layers(
@@ -490,16 +425,20 @@
     // --- Mobile-only: palette toggle
     const palette = document.getElementById('palette');
     const paletteToggle = document.getElementById('paletteToggle');
-    if (window.matchMedia('(max-width: 640px)').matches) {
+    if (IS_MOBILE) {
       paletteToggle.style.display = 'inline-flex';
-      paletteToggle.addEventListener('click', () => { palette.classList.toggle('hidden'); });
+      paletteToggle.addEventListener('click', () => {
+        palette.classList.toggle('hidden');
+      });
+      // starts visible; user can hide if crowded
     }
 
     // ========= Drag + persist =========
     function makeDraggable(el, storageKey, {initial} = {}) {
       if (!el) return;
-      el.style.touchAction = 'none';
+      el.style.touchAction = 'none'; // better touch dragging
 
+      // Restore saved position
       try {
         const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
         const pos = saved || initial || { right: 12, bottom: 12 };
@@ -528,10 +467,12 @@
         const p = getPoint(e);
         start(p.x, p.y);
       };
+
       function getPoint(e){
         if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
         return { x: e.clientX, y: e.clientY };
       }
+
       function onMove(e){
         e.preventDefault();
         if (!dragging) return;
@@ -539,62 +480,81 @@
         updateTo(p.x, p.y);
       }
       function onTouchMove(e){
-        if (!dragging) return; e.preventDefault();
-        const p = getPoint(e); updateTo(p.x, p.y);
+        if (!dragging) return;
+        e.preventDefault();
+        const p = getPoint(e);
+        updateTo(p.x, p.y);
       }
       function updateTo(x, y){
-        const dx = x - startX, dy = y - startY;
-        let newLeft = startRect.left + dx, newTop  = startRect.top  + dy;
+        const dx = x - startX;
+        const dy = y - startY;
+        let newLeft = startRect.left + dx;
+        let newTop  = startRect.top  + dy;
+
+        // Constrain within viewport
         const vw = window.innerWidth, vh = window.innerHeight;
-        const rect = el.getBoundingClientRect(), w = rect.width, h = rect.height;
+        const rect = el.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
         newLeft = Math.max(4, Math.min(vw - w - 4, newLeft));
         newTop  = Math.max(4, Math.min(vh - h - 4, newTop));
-        el.style.left = newLeft + 'px'; el.style.top  = newTop + 'px';
-        el.style.right = 'auto'; el.style.bottom = 'auto';
+
+        el.style.left = newLeft + 'px';
+        el.style.top  = newTop + 'px';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
       }
       function onUp(){
-        if (!dragging) return; dragging = false;
+        if (!dragging) return;
+        dragging = false;
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
         document.removeEventListener('touchmove', onTouchMove);
         document.removeEventListener('touchend', onUp);
+
         const rect = el.getBoundingClientRect();
         const pos = { left: rect.left, top: rect.top };
         localStorage.setItem(storageKey, JSON.stringify(pos));
       }
+
       handle.addEventListener('mousedown', onDown);
       handle.addEventListener('touchstart', onTouchStart, {passive:false});
 
       function applyPos(node, pos){
         if ('left' in pos || 'top' in pos) {
-          node.style.left = (pos.left ?? 12) + 'px'; node.style.top  = (pos.top  ?? 12) + 'px';
-          node.style.right = 'auto'; node.style.bottom = 'auto';
+          node.style.left = (pos.left ?? 12) + 'px';
+          node.style.top  = (pos.top  ?? 12) + 'px';
+          node.style.right = 'auto';
+          node.style.bottom = 'auto';
         } else {
-          node.style.right = (pos.right ?? 12) + 'px'; node.style.bottom = (pos.bottom ?? 12) + 'px';
-          node.style.left = 'auto'; node.style.top  = 'auto';
+          node.style.right = (pos.right ?? 12) + 'px';
+          node.style.bottom = (pos.bottom ?? 12) + 'px';
+          node.style.left = 'auto';
+          node.style.top  = 'auto';
         }
       }
     }
 
+    // Initial positions (desktop vs. mobile defaults)
     const initialPositions = {
-      toolbar:  window.matchMedia('(max-width: 640px)').matches ? { left: 8,  bottom: 8 }  : { right: 12, bottom: 12 },
-      palette:  window.matchMedia('(max-width: 640px)').matches ? { left: 8,  bottom: 112 } : { right: 12, bottom: 100 },
-      locate:   window.matchMedia('(max-width: 640px)').matches ? { right: 8, top: 96 }     : { right: 12, bottom: 160 },
-      panel:    window.matchMedia('(max-width: 640px)').matches ? { right: 8, top: 8 }      : { right: 12, top: 12 },
-      list:     window.matchMedia('(max-width: 640px)').matches ? { left: 8, top: 160 }     : { left: 12, top: 120 }
+      toolbar:  IS_MOBILE ? { left: 8,  bottom: 8 }  : { right: 12, bottom: 12 },
+      palette:  IS_MOBILE ? { left: 8,  bottom: 112 } : { right: 12, bottom: 100 },
+      locate:   IS_MOBILE ? { right: 8, top: 96 }     : { right: 12, bottom: 160 },
+      panel:    IS_MOBILE ? { right: 8, top: 8 }      : { right: 12, top: 12 }
     };
+
+    // Wire up draggables
     makeDraggable(document.getElementById('mainToolbar'), 'pos_toolbar', { initial: initialPositions.toolbar });
     makeDraggable(document.getElementById('palette'),     'pos_palette', { initial: initialPositions.palette });
     makeDraggable(document.getElementById('btnLocate'),   'pos_locate',  { initial: initialPositions.locate });
     makeDraggable(document.getElementById('panelLegal'),  'pos_panel',   { initial: initialPositions.panel });
-    makeDraggable(document.getElementById('listPanel'),   'pos_list',    { initial: initialPositions.list });
 
+    // Optional: quick reset in console → resetUILayout()
     window.resetUILayout = () => {
-      ['pos_toolbar','pos_palette','pos_locate','pos_panel','pos_list'].forEach(k=>localStorage.removeItem(k));
+      ['pos_toolbar','pos_palette','pos_locate','pos_panel'].forEach(k=>localStorage.removeItem(k));
       location.reload();
     };
 
-    // --- Legal Light + Moon ---
+    // --- Legal Light ---
     function updateSun(){
       const c = map.getCenter(), now = new Date(), t = SunCalc.getTimes(now, c.lat, c.lng);
       const fmt = d => d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
@@ -604,71 +564,8 @@
       document.getElementById('civilDusk').textContent = "Civil dusk: " + fmt(t.dusk);
       const mins = (t.sunset - t.sunrise) / 60000;
       document.getElementById('dayLength').textContent = "Day length: " + Math.floor(mins/60) + "h " + (mins%60|0) + "m";
-
-      const mi = SunCalc.getMoonIllumination(now);
-      const phase = mi.phase; // 0 = New, 0.5 = Full
-      const pct = Math.round(mi.fraction*100);
-      const phaseName = phase < 0.06 ? 'New' :
-                        phase < 0.24 ? 'Waxing Crescent' :
-                        phase < 0.26 ? 'First Quarter' :
-                        phase < 0.49 ? 'Waxing Gibbous' :
-                        phase < 0.51 ? 'Full' :
-                        phase < 0.74 ? 'Waning Gibbous' :
-                        phase < 0.76 ? 'Last Quarter' : 'Waning Crescent';
-      document.getElementById('moonPhase').textContent = `Moon: ${phaseName} (${pct}%)`;
-
-      const mt = SunCalc.getMoonTimes(now, c.lat, c.lng, true);
-      const fmt2 = d => d ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
-      document.getElementById('moonTimes').textContent = `Moonrise: ${fmt2(mt.rise)}  Moonset: ${fmt2(mt.set)}`;
     }
     updateSun(); map.on('moveend', updateSun);
-
-    // --- Wind cones for Stand markers ---
-    const windDirInput = document.getElementById('windDir');
-    const windSpreadInput = document.getElementById('windSpread');
-    const windLenInput = document.getElementById('windLen');
-    document.getElementById('btnUpdateWind').onclick = updateAllCones;
-
-    const standCones = new Map(); // marker -> polygon
-    function yardsToMeters(y){ return y * 0.9144; }
-
-    function makeCone(latlng, bearingDeg, spreadDeg, lengthMeters, steps=16){
-      const half = spreadDeg/2;
-      const bearings = [];
-      const start = bearingDeg - half;
-      const end   = bearingDeg + half;
-      for (let i=0;i<=steps;i++){
-        bearings.push(start + (i*(end-start)/steps));
-      }
-      const pts = bearings.map(b => {
-        const dest = turf.destination([latlng.lng, latlng.lat], lengthMeters/1000, b, {units:'kilometers'});
-        const [lng, lat] = dest.geometry.coordinates;
-        return [lat, lng];
-      });
-      pts.unshift([latlng.lat, latlng.lng]); // apex
-      return L.polygon(pts, { color:'#ef4444', weight:1.5, fillColor:'#ef4444', fillOpacity:0.15, interactive:false });
-    }
-
-    function updateConeForMarker(m){
-      if (m.options.type !== 'stand') return;
-      const dir = Number(windDirInput.value)||0;           // direction the wind is blowing TO (downwind)
-      const spread = Math.max(10, Math.min(120, Number(windSpreadInput.value)||40));
-      const lengthM = yardsToMeters(Number(windLenInput.value)||200);
-      // remove old
-      const old = standCones.get(m); if (old) { map.removeLayer(old); standCones.delete(m); }
-      const cone = makeCone(m.getLatLng(), dir, spread, lengthM);
-      cone.addTo(map); standCones.set(m, cone);
-    }
-    function updateAllCones(){
-      markersLayer.eachLayer(m => updateConeForMarker(m));
-    }
-    function clearAllCones(){
-      for (const [m, poly] of standCones) { map.removeLayer(poly); }
-      standCones.clear();
-    }
-
-    // --- Utils ---
-    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   </script>
 </body>
 </html>
