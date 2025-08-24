@@ -19,6 +19,8 @@
   <style>
     html, body { height:100%; margin:0; background:#fff; }
     #map { width:100%; height:100vh; }
+    /* crosshair cursor when placing a marker */
+    #map.placing { cursor: crosshair; }
 
     /* Zoom top-left */
     .leaflet-control-zoom { margin-top: 10px; }
@@ -57,7 +59,7 @@
     .palette {
       position: fixed;
       right: 12px;
-      bottom: 200px;              /* sits above the bottom toolbar */
+      bottom: 100px;              /* sits above the bottom toolbar */
       z-index: 1100;              /* above toolbar, below locate button */
       display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
       background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 6px 8px;
@@ -168,7 +170,7 @@
     map.on(L.Draw.Event.EDITED, saveDraw);
     map.on(L.Draw.Event.DELETED, saveDraw);
 
-    // --- Toolbar actions (drawings) ---
+    // --- Toolbar actions (drawings + markers) ---
     document.getElementById('btnExport').onclick = () => {
       const data = {
         drawings: drawnItems.toGeoJSON(),
@@ -249,27 +251,50 @@
       scrape: { label:'Scrape', icon: makeIcon('#6d28d9','🦌') }
     };
 
+    // --- Toggleable palette ---
     let activeType = null;
-    document.querySelectorAll('.chip').forEach(chip=>{
-      chip.addEventListener('click', ()=>{
-        document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
-        chip.classList.add('active');
-        activeType = chip.getAttribute('data-type');
+    function setActiveType(typeOrNull) {
+      activeType = typeOrNull;
+      // visual selection
+      document.querySelectorAll('.chip').forEach(ch => {
+        ch.classList.toggle('active', ch.getAttribute('data-type') === activeType);
+      });
+      // cursor hint
+      const mapEl = document.getElementById('map');
+      if (activeType) mapEl.classList.add('placing');
+      else mapEl.classList.remove('placing');
+    }
+
+    // clicking a chip toggles it on/off
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const t = chip.getAttribute('data-type');
+        if (activeType === t) setActiveType(null);  // deselect if clicking the same
+        else setActiveType(t);
       });
     });
 
+    // ESC key cancels placement mode
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setActiveType(null);
+    });
+
+    // map click places a marker only if a type is active
     map.on('click', (e) => {
       if (!activeType) return;
       const cfg = markerTypes[activeType];
-      const m = L.marker(e.latlng, { icon: cfg.icon, type: activeType }).addTo(markersLayer);
-      m.bindPopup(`<b>${cfg.label}</b>`);
+      const m = L.marker(e.latlng, { icon: cfg.icon, type: activeType })
+        .addTo(markersLayer)
+        .bindPopup(`<b>${cfg.label}</b>`);
       saveMarkers();
     });
 
+    // clear markers button
     document.getElementById('btnClearMarkers').onclick = () => {
       markersLayer.clearLayers(); saveMarkers();
     };
 
+    // persistence for markers
     function serializeMarkers(){
       const list=[]; markersLayer.eachLayer(m => {
         const {lat,lng} = m.getLatLng();
@@ -346,4 +371,3 @@
   </script>
 </body>
 </html>
-
