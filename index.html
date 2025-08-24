@@ -17,6 +17,8 @@
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
 
   <style>
+    :root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+
     html, body { height:100%; margin:0; background:#fff; }
     #map { width:100%; height:100vh; }
     /* crosshair cursor when placing a marker */
@@ -25,14 +27,16 @@
     /* Zoom top-left */
     .leaflet-control-zoom { margin-top: 10px; }
     /* Draw toolbar below zoom */
-    .leaflet-control-container .leaflet-draw { margin-top: 58px; }
+    .leaflet-control-container .leaflet-draw { margin-top: 50px; }
     /* Layers control bottom-left */
     .leaflet-bottom.leaflet-left .leaflet-control { margin: 0 0 12px 12px; }
 
     /* Bottom toolbar (export/import) */
     .toolbar {
       position: fixed;
-      bottom: 12px; right: 12px; z-index: 1000;
+      bottom: calc(12px + var(--safe-bottom));
+      right: 12px;
+      z-index: 1000;
       background: #fff; border-radius: 10px; padding: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,.2);
       font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
@@ -44,7 +48,7 @@
     }
     .toolbar input[type="file"] { display: none; }
 
-    /* Legal Light top-right */
+    /* Legal Light panel (top-right by default) */
     .panel {
       position: fixed;
       top: 12px; right: 12px; z-index: 900;
@@ -53,13 +57,19 @@
       max-width: 260px;
       font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
-    .panel h3 { margin: 0 0 6px; font-size: 15px; }
+    .panel .drag-handle {
+      font-weight: 600; margin-bottom: 6px; display:flex; align-items:center; gap:8px;
+      cursor: move; user-select:none;
+    }
+    .grip {
+      width: 24px; height: 4px; border-radius: 4px; background:#ccc;
+    }
 
-    /* Marker palette (above bottom toolbar) */
+    /* Marker palette (above bottom toolbar on desktop) */
     .palette {
       position: fixed;
       right: 12px;
-      bottom: 200px;              /* sits above the bottom toolbar */
+      bottom: calc(100px + var(--safe-bottom));   /* sits above the bottom toolbar */
       z-index: 1100;              /* above toolbar, below locate button */
       display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
       background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 6px 8px;
@@ -70,6 +80,7 @@
       display: inline-flex; align-items: center; gap: 6px;
       padding: 6px 10px; border:1px solid #ddd; border-radius: 999px; background:#fff;
       cursor:pointer; user-select:none;
+      white-space: nowrap;
     }
     .chip.active { background:#eef2ff; border-color:#c7d2fe; }
     .emoji { font-size: 18px; line-height: 1; }
@@ -81,7 +92,7 @@
     .locate-btn {
       position: fixed;
       right: 12px;
-      bottom: 160px;             /* above the palette */
+      bottom: calc(160px + var(--safe-bottom));  /* above the palette */
       z-index: 1200;             /* above palette and toolbar */
       background:#fff; border:1px solid #ddd; border-radius: 999px;
       padding: 8px 12px; box-shadow: 0 2px 10px rgba(0,0,0,.2);
@@ -91,29 +102,78 @@
     }
     .locate-btn:active { transform: scale(0.98); }
 
+    /* ===== Draggable helpers ===== */
+    .draggable { position: fixed; }
+    .drag-handle { cursor: move; user-select: none; -webkit-user-select: none; }
+
+    /* ===== Mobile tweaks ===== */
     @media (max-width: 640px) {
-      .panel { top: 56px; right: 8px; }
-      .toolbar { left: 8px; right: 8px; bottom: 8px; justify-content: center; }
-      .palette { right: 8px; left: 8px; bottom: 96px; justify-content: center; }
-      .locate-btn { right: 8px; bottom: 156px; }
+      /* Slightly shrink Leaflet controls */
+      .leaflet-control { transform: scale(0.92); transform-origin: top left; }
+      .leaflet-control-zoom { margin-top: 6px; }
+      .leaflet-control-container .leaflet-draw { margin-top: 46px; }
+
+      .panel { top: 8px; right: 8px; max-width: 220px; font-size: 12px; }
+      .panel .drag-handle { margin-bottom: 4px; }
+      .panel h3 { font-size: 13px; }
+
+      .toolbar {
+        left: 8px; right: 8px; bottom: calc(8px + var(--safe-bottom));
+        justify-content: center; flex-wrap: wrap;
+      }
+
+      /* Palette becomes single-line horizontal scroller */
+      .palette {
+        right: 8px; left: 8px;
+        bottom: calc(112px + var(--safe-bottom));
+        display: block;
+        overflow-x: auto; white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+      }
+      .chip { padding: 4px 8px; font-size: 13px; margin-right: 6px; }
+      .emoji { font-size: 16px; }
+
+      /* Locate button moves near top by default (still draggable) */
+      .locate-btn {
+        right: 8px; bottom: auto;
+        top: 96px;
+      }
+
+      /* Mobile palette toggle button */
+      .palette-toggle {
+        position: fixed;
+        left: 8px; right: 8px;
+        bottom: calc(150px + var(--safe-bottom));
+        z-index: 1150;
+        display: inline-flex; justify-content: center; align-items:center;
+        padding: 8px 12px; border:1px solid #ddd; border-radius: 999px; background:#fff;
+        box-shadow: 0 2px 10px rgba(0,0,0,.2);
+        font: 14px system-ui; cursor: pointer;
+      }
+      .palette.hidden { display: none; }
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Marker palette -->
-  <div class="palette" id="palette">
+  <!-- Marker palette (DRAGGABLE) -->
+  <div class="palette draggable" id="palette">
+    <div class="chip drag-handle" title="Drag me">↔️ Move</div>
     <div class="chip" data-type="stand"><span class="emoji">🎯</span> Stand</div>
     <div class="chip" data-type="feeder"><span class="emoji">🍽️</span> Feeder</div>
     <div class="chip" data-type="camera"><span class="emoji">📷</span> Camera</div>
     <div class="chip" data-type="rub"><span class="emoji">🪵</span> Rub</div>
     <div class="chip" data-type="scrape"><span class="emoji">🦌</span> Scrape</div>
-    <button class="clear" id="btnClearMarkers">Clear Markers</button>
+    <button class="clear" id="btnClearMarkers">Clear</button>
   </div>
 
-  <!-- Bottom-right toolbar -->
-  <div class="toolbar" id="mainToolbar">
+  <!-- Mobile-only: Markers toggle -->
+  <button class="palette-toggle" id="paletteToggle" style="display:none;">Markers</button>
+
+  <!-- Bottom toolbar (DRAGGABLE) -->
+  <div class="toolbar draggable" id="mainToolbar">
+    <button class="drag-handle" title="Drag me">↔️</button>
     <button id="btnExport">Export</button>
     <button id="btnClear">Clear</button>
     <label for="fileImport">Import</label>
@@ -121,9 +181,9 @@
     <button id="btnFull">Fullscreen</button>
   </div>
 
-  <!-- Top-right Legal Light -->
-  <div class="panel">
-    <h3>Legal Light</h3>
+  <!-- Top-right Legal Light (DRAGGABLE) -->
+  <div class="panel draggable" id="panelLegal">
+    <div class="drag-handle"><div class="grip"></div>Legal Light</div>
     <div id="sunrise"></div>
     <div id="sunset"></div>
     <div id="civilDawn"></div>
@@ -131,8 +191,8 @@
     <div id="dayLength"></div>
   </div>
 
-  <!-- Locate button -->
-  <button class="locate-btn" id="btnLocate" type="button" aria-label="Locate Me">📍 Locate Me</button>
+  <!-- Locate button (DRAGGABLE; whole btn is handle) -->
+  <button class="locate-btn draggable drag-handle" id="btnLocate" type="button" aria-label="Locate Me">📍 Locate Me</button>
 
   <script>
     // --- Map ---
@@ -226,6 +286,11 @@
     const markersLayer = L.featureGroup().addTo(map);
     const STORAGE_MARK = "bhh_markers";
 
+    // Responsive icon sizes
+    const IS_MOBILE = window.matchMedia('(max-width: 640px)').matches;
+    const ICON_SZ = IS_MOBILE ? 28 : 32;
+    const FONT_SZ = IS_MOBILE ? 16 : 18;
+
     // CSS-only custom icons via divIcon (no image files)
     function makeIcon(bg, emoji){
       return L.divIcon({
@@ -234,12 +299,12 @@
           background:${bg};
           border:2px solid #333;
           border-radius:50%;
-          width:32px;height:32px;
+          width:${ICON_SZ}px;height:${ICON_SZ}px;
           display:flex;align-items:center;justify-content:center;
-          font-size:18px;color:#fff;font-weight:bold;
+          font-size:${FONT_SZ}px;color:#fff;font-weight:bold;
           box-shadow:0 2px 6px rgba(0,0,0,.3);
         ">${emoji}</div>`,
-        iconSize:[32,32], iconAnchor:[16,32], popupAnchor:[0,-28]
+        iconSize:[ICON_SZ, ICON_SZ], iconAnchor:[ICON_SZ/2, ICON_SZ], popupAnchor:[0, -ICON_SZ*0.9]
       });
     }
 
@@ -265,11 +330,12 @@
       else mapEl.classList.remove('placing');
     }
 
-    // clicking a chip toggles it on/off
+    // clicking a chip toggles it on/off (ignore drag-handle chip)
     document.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const t = chip.getAttribute('data-type');
-        if (activeType === t) setActiveType(null);  // deselect if clicking the same
+        if (!t) return; // skip the "Move" handle chip
+        if (activeType === t) setActiveType(null);
         else setActiveType(t);
       });
     });
@@ -355,6 +421,138 @@
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     });
+
+    // --- Mobile-only: palette toggle
+    const palette = document.getElementById('palette');
+    const paletteToggle = document.getElementById('paletteToggle');
+    if (IS_MOBILE) {
+      paletteToggle.style.display = 'inline-flex';
+      paletteToggle.addEventListener('click', () => {
+        palette.classList.toggle('hidden');
+      });
+      // starts visible; user can hide if crowded
+    }
+
+    // ========= Drag + persist =========
+    function makeDraggable(el, storageKey, {initial} = {}) {
+      if (!el) return;
+      el.style.touchAction = 'none'; // better touch dragging
+
+      // Restore saved position
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+        const pos = saved || initial || { right: 12, bottom: 12 };
+        applyPos(el, pos);
+      } catch {}
+
+      let startX=0, startY=0, startRect=null, dragging=false;
+
+      const handle = el.querySelector('.drag-handle') || el;
+      const start = (clientX, clientY) => {
+        dragging = true;
+        startX = clientX; startY = clientY;
+        startRect = el.getBoundingClientRect();
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onTouchMove, {passive:false});
+        document.addEventListener('touchend', onUp);
+      };
+      const onDown = (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        const p = getPoint(e);
+        start(p.x, p.y);
+      };
+      const onTouchStart = (e) => {
+        const p = getPoint(e);
+        start(p.x, p.y);
+      };
+
+      function getPoint(e){
+        if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return { x: e.clientX, y: e.clientY };
+      }
+
+      function onMove(e){
+        e.preventDefault();
+        if (!dragging) return;
+        const p = getPoint(e);
+        updateTo(p.x, p.y);
+      }
+      function onTouchMove(e){
+        if (!dragging) return;
+        e.preventDefault();
+        const p = getPoint(e);
+        updateTo(p.x, p.y);
+      }
+      function updateTo(x, y){
+        const dx = x - startX;
+        const dy = y - startY;
+        let newLeft = startRect.left + dx;
+        let newTop  = startRect.top  + dy;
+
+        // Constrain within viewport
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const rect = el.getBoundingClientRect();
+        const w = rect.width, h = rect.height;
+        newLeft = Math.max(4, Math.min(vw - w - 4, newLeft));
+        newTop  = Math.max(4, Math.min(vh - h - 4, newTop));
+
+        el.style.left = newLeft + 'px';
+        el.style.top  = newTop + 'px';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+      }
+      function onUp(){
+        if (!dragging) return;
+        dragging = false;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onUp);
+
+        const rect = el.getBoundingClientRect();
+        const pos = { left: rect.left, top: rect.top };
+        localStorage.setItem(storageKey, JSON.stringify(pos));
+      }
+
+      handle.addEventListener('mousedown', onDown);
+      handle.addEventListener('touchstart', onTouchStart, {passive:false});
+
+      function applyPos(node, pos){
+        if ('left' in pos || 'top' in pos) {
+          node.style.left = (pos.left ?? 12) + 'px';
+          node.style.top  = (pos.top  ?? 12) + 'px';
+          node.style.right = 'auto';
+          node.style.bottom = 'auto';
+        } else {
+          node.style.right = (pos.right ?? 12) + 'px';
+          node.style.bottom = (pos.bottom ?? 12) + 'px';
+          node.style.left = 'auto';
+          node.style.top  = 'auto';
+        }
+      }
+    }
+
+    // Initial positions (desktop vs. mobile defaults)
+    const initialPositions = {
+      toolbar:  IS_MOBILE ? { left: 8,  bottom: 8 }  : { right: 12, bottom: 12 },
+      palette:  IS_MOBILE ? { left: 8,  bottom: 112 } : { right: 12, bottom: 100 },
+      locate:   IS_MOBILE ? { right: 8, top: 96 }     : { right: 12, bottom: 160 },
+      panel:    IS_MOBILE ? { right: 8, top: 8 }      : { right: 12, top: 12 }
+    };
+
+    // Wire up draggables
+    makeDraggable(document.getElementById('mainToolbar'), 'pos_toolbar', { initial: initialPositions.toolbar });
+    makeDraggable(document.getElementById('palette'),     'pos_palette', { initial: initialPositions.palette });
+    makeDraggable(document.getElementById('btnLocate'),   'pos_locate',  { initial: initialPositions.locate });
+    makeDraggable(document.getElementById('panelLegal'),  'pos_panel',   { initial: initialPositions.panel });
+
+    // Optional: quick reset in console → resetUILayout()
+    window.resetUILayout = () => {
+      ['pos_toolbar','pos_palette','pos_locate','pos_panel'].forEach(k=>localStorage.removeItem(k));
+      location.reload();
+    };
 
     // --- Legal Light ---
     function updateSun(){
