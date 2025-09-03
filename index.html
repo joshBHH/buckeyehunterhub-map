@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#0b1a0f" />
   <title>Buckeye Hunter Hub — Mobile Hunting Map</title>
   <link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="./manifest.webmanifest">
   
   <!-- Leaflet core -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -1104,6 +1105,13 @@
     });
   }
 
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+</script>
+
+    
   </script>
 </body>
 </html>
